@@ -659,9 +659,16 @@ local function jb_update(m)
     end
 
     -- hud calcs
+    local comboPreserveActions = {
+        [ACT_BUTT_SLIDE]        = true,
+        [ACT_DIVE_SLIDE]        = true,
+        [ACT_SLIDE_KICK]        = true,
+        [ACT_SLIDE_KICK_SLIDE]  = true,
+        [ACT_BREAK_DOWN]        = true,
+    }
     if e.comboTimer > 0 then
         e.comboOpacity = comboOpacityMax
-        if m.pos.y == m.floorHeight and (m.action ~= ACT_SLIDE_KICK_SLIDE and m.action ~= ACT_BUTT_SLIDE and m.action ~= ACT_BREAK_DOWN and m.action ~= ACT_DIVE_SLIDE) then
+        if m.pos.y == m.floorHeight and not comboPreserveActions[m.action] then
             e.comboTimer = e.comboTimer - 1
         end
         if m.pos.y < m.waterLevel then
@@ -745,6 +752,7 @@ _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_PHYS_STEP, jb_before
 local function jb_hud()
     local m = gMarioStates[0]
     local e = gJerStates[0]
+    if gNetworkPlayers[0].currActNum == 99 or gMarioStates[0].action == ACT_INTRO_CUTSCENE or obj_get_first_with_behavior_id(id_bhvActSelector) then return end
 
     djui_hud_set_color(255, 255, 255, 255)
     djui_hud_set_resolution(RESOLUTION_DJUI)
