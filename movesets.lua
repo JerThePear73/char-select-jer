@@ -4,16 +4,21 @@ local ACT_JERNADO = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 local ACT_SPRINGFLIP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_DASH = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BOOST = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
+local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
 end
 
-local opacityMax = 200
-local stepFrame = 5
 local ANGLE_QUEUE_SIZE = 9
 local SPIN_TIMER_SUCCESSFUL_INPUT = 4
+
+local opacityMax = 200
+local stepFrame = 5
+local fuelMax = 0
+local fuelMaxInc = 100
+local fuelCost = 25
 
 local gJerStates = {}
 --local function jer_jess_reset_extra_states(index)
@@ -25,7 +30,9 @@ for i = 0, MAX_PLAYERS - 1 do
         canBoost = true,
         perfectTimer = 0,
         fuel = 0,
+        fuelLerp = 0,
         boostSpeed = 0,
+        prevPosY = 0,
         combo = 0,
         score = 0,
         gfxX = 0,
@@ -169,6 +176,13 @@ end
 ------------------
 -- CUSTOM MOVES --
 ------------------
+
+local trickTable = {
+    [0] = {name = "Ankle Grab",     anim = "jb_anim_trick_1",   hand = MARIO_HAND_FISTS,        start = 0,  fin = 20},
+    [1] = {name = "Bicycle",        anim = "jb_anim_trick_2",   hand = MARIO_HAND_OPEN,         start = 0,  fin = 20},
+    [2] = {name = "Sk8r Pro",       anim = "jb_anim_trick_3",   hand = 5,                       start = 0,  fin = 20},
+    [3] = {name = "Shoot 4 The Sky",anim = "jb_anim_trick_4",   hand = MARIO_HAND_PEACE_SIGN,   start = 5,  fin = 12},
+}
 
 local function act_jernado(m)
 
@@ -332,6 +346,7 @@ local function act_boost(m)
     m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
     m.marioObj.header.gfx.pos.y = m.pos.y - 50
     m.peakHeight = m.pos.y
+    e.fuel = e.fuel - 1
 
     if m.pos.y < (m.waterLevel + 50) then
         m.pos.y = m.waterLevel + 50
@@ -342,7 +357,7 @@ local function act_boost(m)
         m.vel.y = 0
     end
 
-    if m.controller.buttonDown & L_TRIG == 0 then
+    if m.controller.buttonDown & L_TRIG == 0 or e.fuel == 0 then
         m.pos.y = m.pos.y - 50
         set_mario_action(m, ACT_FREEFALL, 0)
     end
@@ -351,6 +366,97 @@ local function act_boost(m)
     return 0
 end
 hook_mario_action(ACT_BOOST, act_boost)
+
+local function act_trick(m)
+    local e = gJerStates[m.playerIndex]
+
+    if m.actionTimer == 0 then
+        play_character_sound(m, CHAR_SOUND_TRICK)
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        m.marioObj.header.gfx.animInfo.animID = -1
+        e.combo = e.combo + 1
+        e.fuel = e.fuel + (10 * e.combo)
+    end
+
+    local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
+    if m.actionTimer == 20 then
+        m.action = ACT_FREEFALL
+        m.actionArg = 0
+    end
+
+    if m.vel.y < 0 then m.vel.y = m.vel.y + 1 end
+    smlua_anim_util_set_animation(m.marioObj, trickTable[m.actionArg].anim)
+    if m.marioObj.header.gfx.animInfo.animFrame >= trickTable[m.actionArg].start and m.marioObj.header.gfx.animInfo.animFrame <= trickTable[m.actionArg].fin then
+        m.marioBodyState.handState = trickTable[m.actionArg].hand
+    end
+
+    m.actionTimer = m.actionTimer + 1
+end
+hook_mario_action(ACT_TRICK, act_trick)
+
+local function act_break_down(m)
+    local e = gJerStates[m.playerIndex]
+    local frame = m.marioObj.header.gfx.animInfo.animFrame
+
+    e.prevPosY = m.pos.y
+
+    set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
+    smlua_anim_util_set_animation(m.marioObj, "jb_anim_break_down")
+
+    if m.actionTimer == 0 then
+        e.boostSpeed = m.forwardVel + 10
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        play_character_sound(m, CHAR_SOUND_YAHOO)
+        m.vel.y = 0
+    end
+    if frame < 30 then
+        if frame == 5 or frame == 10 then
+            play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
+        end
+    end
+
+    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 400, 400)
+
+    if e.boostSpeed > 30 then
+        set_mario_particle_flags(m, PARTICLE_DUST, 0)
+    end
+
+    mario_set_forward_vel(m, e.boostSpeed)
+    local stepResult = perform_ground_step(m)
+    if stepResult == GROUND_STEP_HIT_WALL then
+        m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
+        m.action = ACT_BACKWARD_GROUND_KB
+    elseif stepResult == GROUND_STEP_LEFT_GROUND then
+        set_mario_action(m, ACT_FREEFALL, 0)
+        m.vel.y = 5
+    end
+
+    e.boostSpeed = math.clamp((e.boostSpeed - 0.2 + (e.prevPosY - m.pos.y)/10), 15, 110)
+    if e.boostSpeed == 15 then
+        set_mario_action(m, ACT_BUTT_SLIDE_STOP, 0)
+    end
+
+    if m.input & INPUT_A_PRESSED ~= 0 then
+        m.pos.y = m.pos.y + 30
+        set_mario_action(m, ACT_JUMP, 0)
+    end
+
+    if m.actionTimer > 29 then
+        e.gfxY = e.gfxY + math.round(e.boostSpeed * 0x55)
+    end
+    if e.gfxY > 0x10000 then
+        if m.forwardVel > 35 then
+            play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
+            e.fuel = e.fuel + math.round(m.forwardVel*0.05)
+        end
+        e.gfxY = e.gfxY - 0x10000
+    end
+    m.marioObj.header.gfx.angle.y = e.gfxY
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_BREAK_DOWN, act_break_down)
 
 -------------
 -- UPDATES --
@@ -389,19 +495,23 @@ local boostActions = {
 local function jb_update(m)
     local e = gJerStates[m.playerIndex]
 
+    e.fuel = math.clamp(e.fuel, 0, fuelMax)
+    e.fuelLerp = math.lerp(e.fuelLerp, e.fuel, 0.2)
     mario_update_spin_input(m)
     if m.action == ACT_GROUND_POUND then
         m.marioObj.header.gfx.angle.y = m.faceAngle.y
     end
-    if m.pos.y == m.floorHeight then
-        e.canJernado = true
-        e.canDash = true
-        e.canBoost = true
+    if m.numStars >= 30 then
+        fuelMax = fuelMaxInc * 3
+    elseif m.numStars >= 15 then
+        fuelMax = fuelMaxInc * 2
+    else
+        fuelMax = fuelMaxInc
     end
 
     -- running tilt
-    if m.action == ACT_WALKING and m.pos.y > m.waterLevel then
-        if get_global_timer() % stepFrame == 0 and m.forwardVel > 29 then
+    if m.action == ACT_WALKING then
+        if get_global_timer() % stepFrame == 0 and m.forwardVel > 29 and m.pos.y > m.waterLevel then
             m.particleFlags = m.particleFlags | PARTICLE_DUST
         end
 
@@ -423,11 +533,31 @@ local function jb_update(m)
     if (m.action == ACT_JUMP_LAND or m.action == ACT_FREEFALL_LAND) and m.input & INPUT_Z_DOWN ~= 0 then
         set_mario_action(m, ACT_SLIDE_KICK, 0)
     end
+    -- break down
+    if m.action == ACT_SLIDE_KICK_SLIDE then
+        if m.controller.buttonDown & L_TRIG ~= 0 and e.fuel > 0 and m.forwardVel > 0 then
+            play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
+            set_mario_particle_flags(m, PARTICLE_FIRE, 0)
+            if m.forwardVel < 73 then
+                m.slideVelZ = m.vel.z * 1.1
+                m.slideVelX = m.vel.x * 1.1
+            end
+            e.fuel = e.fuel - 1
+            if m.controller.buttonPressed & X_BUTTON ~= 0 and e.fuel > fuelCost then
+                set_mario_action(m, ACT_BREAK_DOWN, 0)
+                e.gfxY = 0
+                e.fuel = e.fuel - fuelCost
+            end
+        end
+    end
     -- firsties
     if m.action == ACT_WALL_KICK_AIR and (m.prevAction == ACT_AIR_HIT_WALL or m.prevAction == ACT_WALL_KICK_AIR) then
         smlua_anim_util_set_animation(m.marioObj, "jb_anim_wallkick_firstie")
         if m.marioObj.header.gfx.animInfo.animFrame < 10 then
-            m.particleFlags = m.particleFlags | PARTICLE_SPARKLES
+            set_mario_particle_flags(m, PARTICLE_SPARKLES, 0)
+            if m.marioObj.header.gfx.animInfo.animFrame == 1 then
+                e.fuel = e.fuel + 10
+            end
         end
     end
     -- ledge kick
@@ -437,6 +567,8 @@ local function jb_update(m)
             m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
             m.vel.y = 25
             m.forwardVel = 45
+            e.combo = e.combo + 1
+            e.fuel = e.fuel + (20 * e.combo)
         end
         e.perfectTimer = e.perfectTimer + 1
     end
@@ -455,7 +587,7 @@ local function jb_update(m)
         e.canJernado = false
     end
     -- boost
-    if boostActions[m.action] and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost then
+    if boostActions[m.action] and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 then
         set_mario_action(m, ACT_BOOST, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         set_anim_to_frame(m, 0)
@@ -480,6 +612,18 @@ local function jb_update(m)
         e.gfxZ = math.lerp(e.gfxZ, 0, 0.1)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
     end
+    -- tricks
+    if (commonDashActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR) and m.controller.buttonPressed & X_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 500) and m.pos.y > (m.waterLevel + 500) then
+        set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
+    end
+    -- butt slide
+    if m.action == ACT_BUTT_SLIDE and m.input & INPUT_Z_PRESSED ~= 0 then
+        set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 0)
+    end
+    -- special swimming
+    if m.action == ACT_FLUTTER_KICK and m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_FLUTTERKICK then
+        set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
@@ -490,6 +634,17 @@ local function jb_set_action(m)
     e.gfxX = 0
     e.gfxY = 0
     e.gfxZ = 0
+    if m.pos.y == m.floorHeight then
+        e.canJernado = true
+        e.canDash = true
+        e.canBoost = true
+        if m.action ~= ACT_LEDGE_GRAB and m.action ~= ACT_JUMP_KICK then
+            e.combo = 0
+        end
+    end
+    if m.pos.y < m.waterLevel then
+        e.combo = 0
+    end
 
     -- jump height
     if m.action == ACT_JUMP then
@@ -508,9 +663,10 @@ local function jb_set_action(m)
     end
     -- speedkick
     if m.action == ACT_JUMP_KICK then
-        if m.forwardVel > 40 then
+        if m.forwardVel > 45 then
             set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
             m.actionArg = 1
+            e.fuel = e.fuel + 15
         end
     end
 end
@@ -527,3 +683,36 @@ local function jb_before_set_action(m, act)
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_SET_MARIO_ACTION, jb_before_set_action)
+
+local function jb_before_phys_step(m)
+    -- faster swimming
+    if m.action == ACT_FLUTTER_KICK and m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_FLUTTERKICK then
+        mult = 3
+        m.vel.x = m.vel.x * mult
+        m.vel.y = m.vel.y * mult
+        m.vel.z = m.vel.z * mult
+    end
+end
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_PHYS_STEP, jb_before_phys_step)
+
+local function jb_hud()
+    local m = gMarioStates[0]
+    local e = gJerStates[0]
+
+    djui_hud_set_color(255, 255, 255, 255)
+    djui_hud_set_resolution(RESOLUTION_DJUI)
+    djui_hud_set_font(FONT_ALIASED)
+    local width = djui_hud_get_screen_width()
+    local height = djui_hud_get_screen_height()
+
+    djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 250, 1)
+    djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 300, 1)
+
+    djui_hud_set_color(0, 0, 0, 255)
+    djui_hud_render_rect(width - 40 - fuelMax*2, height - 50, fuelMax*2, 30)
+    djui_hud_set_color(255, 255, 255, 255)
+    djui_hud_render_rect(width - 40 - fuelMax*2 + 4, height - 50 + 4, e.fuel*2 - 8, 30 - 8)
+    djui_hud_set_color(0, 200, 0, 255)
+    djui_hud_render_rect(width - 40 - fuelMax*2 + 4, height - 50 + 4, e.fuelLerp*2 - 8, 30 - 8)
+end
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)

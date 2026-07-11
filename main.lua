@@ -22,10 +22,8 @@ local TEX_ART_JB_JER = get_texture_info('jb-graffiti-jer')
 -- Sound --
 local SOUND_MENU_THEME_JB_JER = audio_stream_load('jb_menu_theme.ogg')
 
-CHAR_SOUND_EXTRA_1 = CHAR_SOUND_MAX + 1
-CHAR_SOUND_YEEHAW = CHAR_SOUND_MAX  + 2
-CHAR_SOUND_PIPE = CHAR_SOUND_MAX    + 3
-CHAR_SOUND_ZAP = CHAR_SOUND_MAX     + 4
+CHAR_SOUND_TRICK    = CHAR_SOUND_MAX + 1
+CHAR_SOUND_YEEHAW   = CHAR_SOUND_MAX + 2
 
 VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego Racers (1999)
     [CHAR_SOUND_ATTACKED] = {'jb_jer_no.ogg', 'jb_jer_ouch.ogg'},
@@ -70,10 +68,8 @@ VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego
     [CHAR_SOUND_YAH_WAH_HOO] = {'jb_jer_ha.ogg', 'jb_jer_hoh.ogg'},
     [CHAR_SOUND_OKEY_DOKEY] = 'jb_jer_yeah_jazzy.ogg',
     --CHAR_SOUND_MAX
-    --[CHAR_SOUND_EXTRA_1] = 'jj_sound_rev.ogg',
+    [CHAR_SOUND_TRICK] = {'jb_jer_yeah.ogg', 'jb_jer_hiya.ogg'},
     [CHAR_SOUND_YEEHAW] = {'jb_jer_heeyaw.ogg', 'jb_jer_yeehaw.ogg'},
-    --[CHAR_SOUND_PIPE] = 'jj_sound_pipe.ogg',
-    --[CHAR_SOUND_ZAP] = 'jj_sound_zap.ogg',
 }
 
 local PALETTES_JB_JER = {
@@ -188,7 +184,7 @@ local HANDTABLE_JB_JER = {
 --}
 
 if _G.charSelectExists then
-    CT_JB_JER = _G.charSelect.character_add("Jericho", { "A helmet man with a love for speed. Press L to boost!"},
+    CT_JB_JER = _G.charSelect.character_add("Jer ", { "A helmet man with a love for speed. Press L to boost!"},
         "JerThePear",
         {r = 000, g = 255, b = 000},
         E_MODEL_JB_JER,
