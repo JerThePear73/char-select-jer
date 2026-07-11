@@ -19,6 +19,8 @@ local stepFrame = 5
 local fuelMax = 0
 local fuelMaxInc = 100
 local fuelCost = 25
+local comboTimerMax = 15
+local comboOpacityMax = 10
 
 local gJerStates = {}
 --local function jer_jess_reset_extra_states(index)
@@ -34,7 +36,10 @@ for i = 0, MAX_PLAYERS - 1 do
         boostSpeed = 0,
         prevPosY = 0,
         combo = 0,
+        comboTimer = 0,
+        comboOpacity = 0,
         score = 0,
+        trickName = "",
         gfxX = 0,
         gfxY = 0,
         gfxZ = 0,
@@ -173,14 +178,38 @@ function mario_update_spin_input(m)
     e.lastStickMag = m.controller.stickMag
 end
 
+local trickPoints = {
+    ["trick"]       = 1,
+    ["firstie"]     = 5,
+    ["speedkick"]   = 10,
+    ["sledgekick"]  = 15,
+    ["breakdown"]   = 2,
+}
+
+---@class m gMarioStates
+---@class e gJerStates
+---@param addcombo integer (0 or 1) whether the trick increases your combo or not.
+---@param addscore integer amount of fuel to add from the trck. Multiplied by 10 for score.
+---@param name string the name of the trick that will be displayed.
+local function jerComboAdd(m, e, addcombo, addscore, name)
+    e.combo = e.combo + addcombo
+    if addcombo == 0 and e.combo == 0 then
+        e.combo = 1
+    end
+    e.comboTimer = comboTimerMax
+    e.fuel = e.fuel + (addscore * e.combo)
+    e.score = e.score + (addscore * e.combo)*10
+    e.trickName = name
+end
+
 ------------------
 -- CUSTOM MOVES --
 ------------------
 
 local trickTable = {
     [0] = {name = "Ankle Grab",     anim = "jb_anim_trick_1",   hand = MARIO_HAND_FISTS,        start = 0,  fin = 20},
-    [1] = {name = "Bicycle",        anim = "jb_anim_trick_2",   hand = MARIO_HAND_OPEN,         start = 0,  fin = 20},
-    [2] = {name = "Sk8r Pro",       anim = "jb_anim_trick_3",   hand = 5,                       start = 0,  fin = 20},
+    [1] = {name = "Bicycle Kick",   anim = "jb_anim_trick_2",   hand = MARIO_HAND_OPEN,         start = 0,  fin = 20},
+    [2] = {name = "Sk8 Star",       anim = "jb_anim_trick_3",   hand = 5,                       start = 0,  fin = 20},
     [3] = {name = "Shoot 4 The Sky",anim = "jb_anim_trick_4",   hand = MARIO_HAND_PEACE_SIGN,   start = 5,  fin = 12},
 }
 
@@ -374,11 +403,13 @@ local function act_trick(m)
         play_character_sound(m, CHAR_SOUND_TRICK)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
-        e.combo = e.combo + 1
-        e.fuel = e.fuel + (10 * e.combo)
+        jerComboAdd(m, e, 1, trickPoints["trick"], trickTable[m.actionArg].name)
     end
 
     local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
+    if stepResult == AIR_STEP_LANDED then
+        m.actionArg = 0
+    end
     if m.actionTimer == 20 then
         m.action = ACT_FREEFALL
         m.actionArg = 0
@@ -415,7 +446,7 @@ local function act_break_down(m)
         end
     end
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 400, 400)
+    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 500, 500)
 
     if e.boostSpeed > 30 then
         set_mario_particle_flags(m, PARTICLE_DUST, 0)
@@ -447,7 +478,7 @@ local function act_break_down(m)
     if e.gfxY > 0x10000 then
         if m.forwardVel > 35 then
             play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
-            e.fuel = e.fuel + math.round(m.forwardVel*0.05)
+            jerComboAdd(m, e, 0, trickPoints["breakdown"], "Break it Down")
         end
         e.gfxY = e.gfxY - 0x10000
     end
@@ -462,7 +493,7 @@ hook_mario_action(ACT_BREAK_DOWN, act_break_down)
 -- UPDATES --
 -------------
 
-local commonDashActions = {
+local commonAirActions = {
     [ACT_JUMP] = true,
     [ACT_FREEFALL] = true,
     [ACT_WALL_KICK_AIR] = true,
@@ -470,11 +501,11 @@ local commonDashActions = {
     [ACT_SIDE_FLIP] = true,
     [ACT_BACKFLIP] = true,
     [ACT_FORWARD_ROLLOUT] = true,
-    [ACT_SLIDE_KICK] = false,
+    [ACT_TWIRLING] = true,
+    [ACT_TOP_OF_POLE_JUMP] = true,
     [ACT_JERNADO] = true,
     [ACT_DASH] = true,
 }
-
 local boostActions = {
     [ACT_JUMP] = true,
     [ACT_FREEFALL] = true,
@@ -483,14 +514,14 @@ local boostActions = {
     [ACT_SIDE_FLIP] = true,
     [ACT_BACKFLIP] = true,
     [ACT_FORWARD_ROLLOUT] = true,
-    [ACT_SLIDE_KICK] = false,
+    [ACT_TWIRLING] = true,
+    [ACT_TOP_OF_POLE_JUMP] = true,
     [ACT_JERNADO] = true,
     [ACT_DASH] = true,
     [ACT_WALKING] = true,
     [ACT_IDLE] = true,
     [ACT_GROUND_POUND] = true,
 }
-
 
 local function jb_update(m)
     local e = gJerStates[m.playerIndex]
@@ -507,6 +538,9 @@ local function jb_update(m)
         fuelMax = fuelMaxInc * 2
     else
         fuelMax = fuelMaxInc
+    end
+    if m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_HANDSTAND_JUMP then
+        m.marioObj.header.gfx.pos.y = m.pos.y - 200
     end
 
     -- running tilt
@@ -556,7 +590,7 @@ local function jb_update(m)
         if m.marioObj.header.gfx.animInfo.animFrame < 10 then
             set_mario_particle_flags(m, PARTICLE_SPARKLES, 0)
             if m.marioObj.header.gfx.animInfo.animFrame == 1 then
-                e.fuel = e.fuel + 10
+                jerComboAdd(m, e, 1, trickPoints["firstie"], "Firstie")
             end
         end
     end
@@ -567,8 +601,7 @@ local function jb_update(m)
             m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
             m.vel.y = 25
             m.forwardVel = 45
-            e.combo = e.combo + 1
-            e.fuel = e.fuel + (20 * e.combo)
+            jerComboAdd(m, e, 1, trickPoints["sledgekick"], "Sledge-Kick")
         end
         e.perfectTimer = e.perfectTimer + 1
     end
@@ -577,12 +610,12 @@ local function jb_update(m)
         set_mario_action(m, ACT_SPRINGFLIP, 0)
     end
     -- air dash
-    if commonDashActions[m.action] and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight then
+    if commonAirActions[m.action] and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight then
         set_mario_action(m, ACT_DASH, 0)
         e.canDash = false
     end
     -- jernado
-    if (commonDashActions[m.action] or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
+    if (commonAirActions[m.action] or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
         set_mario_action(m, ACT_JERNADO, 0)
         e.canJernado = false
     end
@@ -613,7 +646,7 @@ local function jb_update(m)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
     end
     -- tricks
-    if (commonDashActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR) and m.controller.buttonPressed & X_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 500) and m.pos.y > (m.waterLevel + 500) then
+    if (commonAirActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR) and m.controller.buttonPressed & X_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 500) and m.pos.y > (m.waterLevel + 500) then
         set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
     -- butt slide
@@ -623,6 +656,26 @@ local function jb_update(m)
     -- special swimming
     if m.action == ACT_FLUTTER_KICK and m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_FLUTTERKICK then
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
+    end
+
+    -- hud calcs
+    if e.comboTimer > 0 then
+        e.comboOpacity = comboOpacityMax
+        if m.pos.y == m.floorHeight and (m.action ~= ACT_SLIDE_KICK_SLIDE and m.action ~= ACT_BUTT_SLIDE and m.action ~= ACT_BREAK_DOWN and m.action ~= ACT_DIVE_SLIDE) then
+            e.comboTimer = e.comboTimer - 1
+        end
+        if m.pos.y < m.waterLevel then
+            e.combo = 0
+            e.score = 0
+            e.comboTimer = 0
+        end
+    else
+        if e.comboOpacity > 0 then
+            e.comboOpacity = e.comboOpacity - 1
+        elseif e.comboOpacity == 0 then
+            e.combo = 0
+            e.score = 0
+        end
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
@@ -638,12 +691,6 @@ local function jb_set_action(m)
         e.canJernado = true
         e.canDash = true
         e.canBoost = true
-        if m.action ~= ACT_LEDGE_GRAB and m.action ~= ACT_JUMP_KICK then
-            e.combo = 0
-        end
-    end
-    if m.pos.y < m.waterLevel then
-        e.combo = 0
     end
 
     -- jump height
@@ -666,7 +713,7 @@ local function jb_set_action(m)
         if m.forwardVel > 45 then
             set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
             m.actionArg = 1
-            e.fuel = e.fuel + 15
+            jerComboAdd(m, e, 1, trickPoints["speedkick"], "Speed-Kick")
         end
     end
 end
@@ -704,15 +751,45 @@ local function jb_hud()
     djui_hud_set_font(FONT_ALIASED)
     local width = djui_hud_get_screen_width()
     local height = djui_hud_get_screen_height()
+    local halfW = width/2
+    local halfH = height/2
+    local eCol = network_player_get_override_palette_color(gNetworkPlayers[0], EMBLEM)
 
-    djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 250, 1)
-    djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 300, 1)
+    -- DEBUG HUD
+    --djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 250, 1)
+    --djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 300, 1)
 
+    local yOff = 40
+    local xOff = 20
     djui_hud_set_color(0, 0, 0, 255)
-    djui_hud_render_rect(width - 40 - fuelMax*2, height - 50, fuelMax*2, 30)
+    djui_hud_render_rect(width - xOff - fuelMax*2, height - yOff, fuelMax*2, 30)
     djui_hud_set_color(255, 255, 255, 255)
-    djui_hud_render_rect(width - 40 - fuelMax*2 + 4, height - 50 + 4, e.fuel*2 - 8, 30 - 8)
-    djui_hud_set_color(0, 200, 0, 255)
-    djui_hud_render_rect(width - 40 - fuelMax*2 + 4, height - 50 + 4, e.fuelLerp*2 - 8, 30 - 8)
+    djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuel*2 - 8, 30 - 8)
+    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
+    djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuelLerp*2 - 8, 30 - 8)
+
+    if e.comboOpacity > 0 then
+        local opacity = ((e.comboOpacity/comboOpacityMax) * 255)
+        --local opacity = 255
+        local nameLength = #e.trickName
+        local scoreLength = #tostring(e.score)
+        djui_hud_set_font(FONT_RECOLOR_HUD)
+        djui_hud_set_color(0, 0, 0, opacity)
+        djui_hud_render_rect(halfW - 200, height - 110, 400, 10)
+        djui_hud_set_color(255, 255, 255, opacity)
+        djui_hud_render_rect(halfW - 200, height - 110, (e.comboTimer/comboTimerMax)*400, 10)
+        djui_hud_print_text(e.trickName, halfW - nameLength*12, height - 90, 2)
+
+        local comboLimit = math.clamp(e.combo, 0, 10)
+        local comboCol = math.clamp((comboLimit+0.2)*25, 0, 255)
+
+        --djui_hud_set_font(FONT_HUD)
+        djui_hud_set_color(eCol.r, eCol.g, eCol.b, opacity)
+        djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25, height - 185, 4)
+        --djui_hud_set_font(FONT_RECOLOR_HUD)
+        djui_hud_set_color(comboCol, 255-comboCol, 255-(comboCol/2)+50, opacity)
+        djui_hud_print_text("x"..tostring(e.combo), halfW + 210, height - 135, 3)
+
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)

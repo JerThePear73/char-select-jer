@@ -91,8 +91,8 @@ local PALETTES_JB_JER = {
         [SHOES]  = "ffff46",
         [HAIR]   = "00643c",
         [SKIN]   = "ffc2ab",
-        [CAP]    = "00aaaa",
-        [EMBLEM] = "006e6e",
+        [CAP]    = "006e6e",
+        [EMBLEM] = "00ffff",
     },{
         name = "Proto-Parking",
         [PANTS]  = "003264",
