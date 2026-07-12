@@ -145,6 +145,9 @@ local ANIMTABLE_JB_JER = {
     [MARIO_ANIM_LAND_FROM_SINGLE_JUMP]  = "jb_anim_land_single_jump",
     [MARIO_ANIM_LAND_FROM_DOUBLE_JUMP]  = "jb_anim_land_double_jump",
     [MARIO_ANIM_SLIDE_KICK]             = "jb_anim_slide_kick",
+    [MARIO_ANIM_START_RIDING_SHELL]     = "jb_anim_shell_ride_start",
+    [MARIO_ANIM_RIDING_SHELL]           = "jb_anim_shell_ride_land",
+    [MARIO_ANIM_JUMP_RIDING_SHELL]      = "jb_anim_shell_ride_jump",
 }
 
 local EYETABLE_JB_JER = {
@@ -184,7 +187,7 @@ local HANDTABLE_JB_JER = {
 --}
 
 if _G.charSelectExists then
-    CT_JB_JER = _G.charSelect.character_add("Jer ", { "A helmet man with a love for speed. Press L to boost!"},
+    CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with a love for speed. Press L to boost!"},
         "JerThePear",
         {r = 000, g = 255, b = 000},
         E_MODEL_JB_JER,

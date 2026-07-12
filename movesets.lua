@@ -7,6 +7,8 @@ local ACT_BOOST = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_
 local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 
+local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING)
+
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
 end
@@ -21,6 +23,7 @@ local fuelMaxInc = 100
 local fuelCost = 25
 local comboTimerMax = 15
 local comboOpacityMax = 10
+local turn90 = degrees_to_sm64(90)
 
 local gJerStates = {}
 --local function jer_jess_reset_extra_states(index)
@@ -184,6 +187,7 @@ local trickPoints = {
     ["speedkick"]   = 10,
     ["sledgekick"]  = 15,
     ["breakdown"]   = 2,
+    ["grind"]       = 1,
 }
 
 ---@class m gMarioStates
@@ -399,6 +403,8 @@ hook_mario_action(ACT_BOOST, act_boost)
 local function act_trick(m)
     local e = gJerStates[m.playerIndex]
 
+    m.peakHeight = m.pos.y
+
     if m.actionTimer == 0 then
         play_character_sound(m, CHAR_SOUND_TRICK)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
@@ -422,6 +428,7 @@ local function act_trick(m)
     end
 
     m.actionTimer = m.actionTimer + 1
+    return 0
 end
 hook_mario_action(ACT_TRICK, act_trick)
 
@@ -488,6 +495,62 @@ local function act_break_down(m)
     return 0
 end
 hook_mario_action(ACT_BREAK_DOWN, act_break_down)
+
+local function act_rail_grind(m)
+    local e = gJerStates[m.playerIndex]
+    local intendedDYaw = convert_s16(m.intendedYaw - m.faceAngle.y)
+
+    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
+    play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
+    spawn_mist_particles_variable(5, 0, 5)
+    m.marioBodyState.handState = MARIO_HAND_OPEN
+
+    if m.actionTimer == 0 then
+        if intendedDYaw > 0 then
+            m.faceAngle.y = m.faceAngle.y + turn90
+        elseif intendedDYaw < 0 then
+            m.faceAngle.y = m.faceAngle.y - turn90
+        end
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        play_character_sound(m, CHAR_SOUND_HOOHOO)
+        e.boostSpeed = 60
+        e.combo = e.combo + 1
+    end
+    if (m.actionTimer % 5) == 0 then
+        jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes")
+    end
+    mario_set_forward_vel(m, e.boostSpeed)
+
+    local stepResult = perform_ground_step(m)
+    if stepResult == GROUND_STEP_LEFT_GROUND then
+        m.vel.y = 0
+        m.forwardVel = m.forwardVel - 20
+        return set_mario_action(m, ACT_FREEFALL, 0)
+    elseif stepResult == GROUND_STEP_HIT_WALL then
+        return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
+    end
+
+    local dist = 40
+    local checkA = m.pos.y - find_floor_height_relative_polar(m, turn90, dist)
+    local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, dist)
+    local height = 10
+
+    if checkA < height and checkB < height then
+        return set_mario_action(m, ACT_BRAKING, 0)
+    end
+
+    if m.input & INPUT_A_PRESSED ~= 0 then
+        set_mario_action(m, ACT_JUMP, 0)
+    end
+
+    local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 10)
+    local tilt = math.tan(checkFront/10)*2000
+    m.marioObj.header.gfx.angle.x = tilt
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_RAIL_GRIND, act_rail_grind)
 
 -------------
 -- UPDATES --
@@ -657,6 +720,11 @@ local function jb_update(m)
     if m.action == ACT_FLUTTER_KICK and m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_FLUTTERKICK then
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
+    -- rail grind
+    if m.controller.buttonDown & A_BUTTON ~= 0 and m.action == ACT_LEDGE_GRAB and m.input & INPUT_NONZERO_ANALOG ~= 0 then -- and m.floor.normal.y < 0.9 then
+        set_mario_action(m, ACT_RAIL_GRIND, 0)
+    end
+
 
     -- hud calcs
     local comboPreserveActions = {
@@ -665,15 +733,14 @@ local function jb_update(m)
         [ACT_SLIDE_KICK]        = true,
         [ACT_SLIDE_KICK_SLIDE]  = true,
         [ACT_BREAK_DOWN]        = true,
+        [ACT_RAIL_GRIND]        = true,
     }
     if e.comboTimer > 0 then
         e.comboOpacity = comboOpacityMax
         if m.pos.y == m.floorHeight and not comboPreserveActions[m.action] then
             e.comboTimer = e.comboTimer - 1
         end
-        if m.pos.y < m.waterLevel then
-            e.combo = 0
-            e.score = 0
+        if m.action == ACT_WATER_PLUNGE or m.action == ACT_WATER_IDLE then
             e.comboTimer = 0
         end
     else
@@ -766,6 +833,12 @@ local function jb_hud()
     -- DEBUG HUD
     --djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 250, 1)
     --djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 300, 1)
+    --djui_hud_print_text(("m.floor.normal.x = "..tostring(m.floor.normal.x)), 75, 350, 1)
+    --djui_hud_print_text(("m.floor.normal.y = "..tostring(m.floor.normal.y)), 75, 375, 1)
+    --djui_hud_print_text(("m.floor.normal.z = "..tostring(m.floor.normal.z)), 75, 400, 1)
+    --djui_hud_print_text(("intendedDYaw = "..tostring(convert_s16(m.intendedYaw - m.faceAngle.y))), 75, 450, 1)
+
+
 
     local yOff = 40
     local xOff = 20
