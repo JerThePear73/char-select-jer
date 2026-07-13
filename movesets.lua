@@ -6,8 +6,8 @@ local ACT_DASH = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_F
 local ACT_BOOST = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
-
-local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING)
+local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
+local ACT_RAIL_TRICK = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -43,6 +43,7 @@ for i = 0, MAX_PLAYERS - 1 do
         comboOpacity = 0,
         score = 0,
         trickName = "",
+        connectGrind = false,
         gfxX = 0,
         gfxY = 0,
         gfxZ = 0,
@@ -213,8 +214,13 @@ end
 local trickTable = {
     [0] = {name = "Ankle Grab",     anim = "jb_anim_trick_1",   hand = MARIO_HAND_FISTS,        start = 0,  fin = 20},
     [1] = {name = "Bicycle Kick",   anim = "jb_anim_trick_2",   hand = MARIO_HAND_OPEN,         start = 0,  fin = 20},
-    [2] = {name = "Sk8 Star",       anim = "jb_anim_trick_3",   hand = 5,                       start = 0,  fin = 20},
+    [2] = {name = "Skate Pro",      anim = "jb_anim_trick_3",   hand = 5,                       start = 0,  fin = 20},
     [3] = {name = "Shoot 4 The Sky",anim = "jb_anim_trick_4",   hand = MARIO_HAND_PEACE_SIGN,   start = 5,  fin = 12},
+}
+local trickTableGrind = {
+    [0] = {name = "Cartwheel",      anim = "jb_anim_trick_rail_1", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
+    [1] = {name = "Smooth Spin",    anim = "jb_anim_trick_rail_2", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
+    [2] = {name = "Roundhouse",     anim = "jb_anim_trick_rail_3", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
 }
 
 local function act_jernado(m)
@@ -500,47 +506,74 @@ local function act_rail_grind(m)
     local e = gJerStates[m.playerIndex]
     local intendedDYaw = convert_s16(m.intendedYaw - m.faceAngle.y)
 
-    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
     play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
     spawn_mist_particles_variable(5, 0, 5)
     m.marioBodyState.handState = MARIO_HAND_OPEN
 
-    if m.actionTimer == 0 then
+    if m.actionTimer == 0 and m.prevAction ~= ACT_RAIL_TRICK then
         if intendedDYaw > 0 then
             m.faceAngle.y = m.faceAngle.y + turn90
         elseif intendedDYaw < 0 then
             m.faceAngle.y = m.faceAngle.y - turn90
         end
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        play_character_sound(m, CHAR_SOUND_HOOHOO)
         e.boostSpeed = 60
-        e.combo = e.combo + 1
+        m.vel.x = 0
+        m.vel.y = 0
+        m.vel.z = 0
+        if m.actionArg == 0 then
+            play_character_sound(m, CHAR_SOUND_HOOHOO)
+        end
     end
-    if (m.actionTimer % 5) == 0 then
+
+    if (m.actionTimer % 5) == 0 and m.actionTimer > 0 then
         jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes")
     end
+    if m.input & INPUT_A_PRESSED ~= 0 and m.actionTimer > 1 then
+        set_mario_action(m, ACT_JUMP, 0)
+        m.pos.y = m.pos.y + 5
+    end
+    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
+
+    if m.controller.buttonPressed & X_BUTTON ~= 0 then
+        return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
+    end
+    if m.actionArg == 1 then
+        set_anim_to_frame(m, 20)
+    end
+
     mario_set_forward_vel(m, e.boostSpeed)
 
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_LEFT_GROUND then
-        m.vel.y = 0
-        m.forwardVel = m.forwardVel - 20
-        return set_mario_action(m, ACT_FREEFALL, 0)
+        if m.input & INPUT_NONZERO_ANALOG ~= 0 then
+            e.connectGrind = true
+            m.action = ACT_FREEFALL
+            m.actionArg = 0
+            m.faceAngle.y = m.faceAngle.y - turn90*2
+            m.marioObj.header.gfx.angle.y = m.faceAngle.y + 2*turn90
+            m.pos.y = m.pos.y - 100
+            m.vel.y = -15
+            m.forwardVel = 1
+            m.pos.x = m.pos.x - math.sin(m.faceAngle.y) * 4
+            m.pos.z = m.pos.z - math.cos(m.faceAngle.y) * 4
+        else
+            e.connectGrind = false
+            m.vel.y = 10
+            m.forwardVel = 40
+            return set_mario_action(m, ACT_FREEFALL, 0)
+        end
     elseif stepResult == GROUND_STEP_HIT_WALL then
         return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
     end
 
-    local dist = 40
-    local checkA = m.pos.y - find_floor_height_relative_polar(m, turn90, dist)
-    local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, dist)
+    local checkA = m.pos.y - find_floor_height_relative_polar(m, turn90, 30)
+    local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, 30)
     local height = 10
 
-    if checkA < height and checkB < height then
+    if (checkA < height and checkB < height) then
+        e.connectGrind = false
         return set_mario_action(m, ACT_BRAKING, 0)
-    end
-
-    if m.input & INPUT_A_PRESSED ~= 0 then
-        set_mario_action(m, ACT_JUMP, 0)
     end
 
     local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 10)
@@ -551,6 +584,57 @@ local function act_rail_grind(m)
     return 0
 end
 hook_mario_action(ACT_RAIL_GRIND, act_rail_grind)
+
+local function act_rail_trick(m)
+    local e = gJerStates[m.playerIndex]
+
+    play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
+    set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
+    spawn_mist_particles_variable(5, 0, 5)
+
+    if m.actionTimer == 0 then
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        set_anim_to_frame(m, 0)
+        play_character_sound(m, CHAR_SOUND_TRICK)
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name)
+    end
+
+    smlua_anim_util_set_animation(m.marioObj, trickTableGrind[m.actionArg].anim)
+    if m.marioObj.header.gfx.animInfo.animFrame == 19 then
+        return set_mario_action(m, ACT_RAIL_GRIND, 1)
+    end
+
+    mario_set_forward_vel(m, e.boostSpeed)
+
+    local stepResult = perform_ground_step(m)
+    if stepResult == GROUND_STEP_LEFT_GROUND then
+        e.connectGrind = false
+        m.vel.y = 10
+        m.forwardVel = 40
+        return set_mario_action(m, ACT_FREEFALL, 0)
+    elseif stepResult == GROUND_STEP_HIT_WALL then
+        return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
+    end
+
+    local checkA = m.pos.y - find_floor_height_relative_polar(m, turn90, 30)
+    local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, 30)
+    local height = 10
+
+    if (checkA < height and checkB < height) then
+        e.connectGrind = false
+        return set_mario_action(m, ACT_BRAKING, 0)
+    end
+
+    local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 10)
+    local tilt = math.tan(checkFront/10)*2000
+    m.marioObj.header.gfx.angle.x = tilt
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_RAIL_TRICK, act_rail_trick)
+
 
 -------------
 -- UPDATES --
@@ -602,8 +686,8 @@ local function jb_update(m)
     else
         fuelMax = fuelMaxInc
     end
-    if m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_HANDSTAND_JUMP then
-        m.marioObj.header.gfx.pos.y = m.pos.y - 200
+    if m.action == ACT_JUMP and m.actionArg == 73 then
+        smlua_anim_util_set_animation(m.marioObj, "jb_anim_single_jump_big")
     end
 
     -- running tilt
@@ -679,8 +763,10 @@ local function jb_update(m)
     end
     -- jernado
     if (commonAirActions[m.action] or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
-        set_mario_action(m, ACT_JERNADO, 0)
-        e.canJernado = false
+        if m.action ~= ACT_SIDE_FLIP or m.marioObj.header.gfx.animInfo.animFrame >= 10 then
+            set_mario_action(m, ACT_JERNADO, 0)
+            e.canJernado = false
+        end
     end
     -- boost
     if boostActions[m.action] and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 then
@@ -709,7 +795,7 @@ local function jb_update(m)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
     end
     -- tricks
-    if (commonAirActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR) and m.controller.buttonPressed & X_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 500) and m.pos.y > (m.waterLevel + 500) then
+    if (commonAirActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR) and m.controller.buttonPressed & X_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 250) then
         set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
     -- butt slide
@@ -721,8 +807,15 @@ local function jb_update(m)
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
     -- rail grind
-    if m.controller.buttonDown & A_BUTTON ~= 0 and m.action == ACT_LEDGE_GRAB and m.input & INPUT_NONZERO_ANALOG ~= 0 then -- and m.floor.normal.y < 0.9 then
-        set_mario_action(m, ACT_RAIL_GRIND, 0)
+    if m.action == ACT_LEDGE_GRAB and m.input & INPUT_NONZERO_ANALOG ~= 0 and m.floor.normal.y > 0.6 then
+        if e.connectGrind then
+            set_mario_action(m, ACT_RAIL_GRIND, 1)
+        elseif m.controller.buttonDown & A_BUTTON ~= 0 then
+            set_mario_action(m, ACT_RAIL_GRIND, 0)
+        end
+    end
+    if m.pos.y == m.floorHeight and (m.action ~= ACT_RAIL_GRIND and m.action ~= ACT_LEDGE_GRAB) then
+        e.connectGrind = false
     end
 
 
@@ -734,6 +827,8 @@ local function jb_update(m)
         [ACT_SLIDE_KICK_SLIDE]  = true,
         [ACT_BREAK_DOWN]        = true,
         [ACT_RAIL_GRIND]        = true,
+        [ACT_RAIL_TRICK]        = true,
+        [ACT_LEDGE_GRAB]        = true,
     }
     if e.comboTimer > 0 then
         e.comboOpacity = comboOpacityMax
@@ -790,6 +885,10 @@ local function jb_set_action(m)
             jerComboAdd(m, e, 1, trickPoints["speedkick"], "Speed-Kick")
         end
     end
+    -- jump anim
+    if m.action == ACT_JUMP and m.forwardVel > 45 then
+        m.actionArg = 73
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_SET_MARIO_ACTION, jb_set_action)
 
@@ -831,12 +930,16 @@ local function jb_hud()
     local eCol = network_player_get_override_palette_color(gNetworkPlayers[0], EMBLEM)
 
     -- DEBUG HUD
-    --djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 250, 1)
-    --djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 300, 1)
-    --djui_hud_print_text(("m.floor.normal.x = "..tostring(m.floor.normal.x)), 75, 350, 1)
-    --djui_hud_print_text(("m.floor.normal.y = "..tostring(m.floor.normal.y)), 75, 375, 1)
-    --djui_hud_print_text(("m.floor.normal.z = "..tostring(m.floor.normal.z)), 75, 400, 1)
-    --djui_hud_print_text(("intendedDYaw = "..tostring(convert_s16(m.intendedYaw - m.faceAngle.y))), 75, 450, 1)
+    --djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 200, 1)
+    --djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 225, 1)
+    --djui_hud_print_text(("m.floor.normal.x = "..tostring(m.floor.normal.x)), 75, 250, 1)
+    --djui_hud_print_text(("m.floor.normal.y = "..tostring(m.floor.normal.y)), 75, 275, 1)
+    --djui_hud_print_text(("m.floor.normal.z = "..tostring(m.floor.normal.z)), 75, 300, 1)
+    --djui_hud_print_text(("intendedDYaw = "..tostring(convert_s16(m.intendedYaw - m.faceAngle.y))), 75, 325, 1)
+    --djui_hud_print_text(("m.actionTimer = "..tostring(m.actionTimer)), 75, 350, 1)
+    --djui_hud_print_text(("m.actionArg = "..tostring(m.actionArg)), 75, 375, 1)
+    --djui_hud_print_text(("animFrame = "..tostring(m.marioObj.header.gfx.animInfo.animFrame)), 75, 400, 1)
+
 
 
 

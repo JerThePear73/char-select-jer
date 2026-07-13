@@ -68,7 +68,7 @@ VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego
     [CHAR_SOUND_YAH_WAH_HOO] = {'jb_jer_ha.ogg', 'jb_jer_hoh.ogg'},
     [CHAR_SOUND_OKEY_DOKEY] = 'jb_jer_yeah_jazzy.ogg',
     --CHAR_SOUND_MAX
-    [CHAR_SOUND_TRICK] = {'jb_jer_yeah.ogg', 'jb_jer_hiya.ogg'},
+    [CHAR_SOUND_TRICK] = {'jb_jer_yeah.ogg', 'jb_jer_hiya.ogg', 'jb_jer_yeah_jazzy.ogg'},
     [CHAR_SOUND_YEEHAW] = {'jb_jer_heeyaw.ogg', 'jb_jer_yeehaw.ogg'},
 }
 
@@ -148,6 +148,7 @@ local ANIMTABLE_JB_JER = {
     [MARIO_ANIM_START_RIDING_SHELL]     = "jb_anim_shell_ride_start",
     [MARIO_ANIM_RIDING_SHELL]           = "jb_anim_shell_ride_land",
     [MARIO_ANIM_JUMP_RIDING_SHELL]      = "jb_anim_shell_ride_jump",
+    [MARIO_ANIM_HANDSTAND_JUMP]         = "jb_anim_single_jump_big",
 }
 
 local EYETABLE_JB_JER = {
