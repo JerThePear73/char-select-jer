@@ -44,6 +44,7 @@ for i = 0, MAX_PLAYERS - 1 do
         score = 0,
         trickName = "",
         connectGrind = false,
+        railTrick = -1,
         gfxX = 0,
         gfxY = 0,
         gfxZ = 0,
@@ -57,48 +58,6 @@ for i = 0, MAX_PLAYERS - 1 do
     }
     for j=0,(ANGLE_QUEUE_SIZE-1) do gJerStates[i].angleDeltaQueue[j] = 0 end
 end
-
---local E_MODEL_JER_AFTERIMAGE = smlua_model_util_get_id("jer_afterimage_geo")
---local AfterImageDuration = 15
-
-function afterimage_init(o)
-  local index = network_local_index_from_global(o.globalPlayerIndex) or 255
-  if index == 255 then
-    obj_mark_for_deletion(o)
-    return
-  end
-  local m = gMarioStates[index]
-  o.oFlags = OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE
-  o.oOpacity = 0
-
-  o.oPosX = m.marioObj.header.gfx.pos.x
-  o.oPosY = m.marioObj.header.gfx.pos.y
-  o.oPosZ = m.marioObj.header.gfx.pos.z
-  o.oFaceAnglePitch = m.marioObj.header.gfx.angle.x
-  o.oFaceAngleYaw = m.marioObj.header.gfx.angle.y
-  o.oFaceAngleRoll = m.marioObj.header.gfx.angle.z
-  o.header.gfx.animInfo.animID = m.marioObj.header.gfx.animInfo.animID
-  o.header.gfx.animInfo.curAnim = m.marioObj.header.gfx.animInfo.curAnim
-  o.header.gfx.animInfo.animYTrans = m.unkB0
-  o.header.gfx.animInfo.animAccel = 0            --m.marioObj.header.gfx.animInfo.animAccel
-  o.header.gfx.animInfo.animFrame = m.marioObj.header.gfx.animInfo.animFrame
-  o.header.gfx.animInfo.animTimer = m.marioObj.header.gfx.animInfo.animTimer
-  o.header.gfx.animInfo.animFrameAccelAssist = 0 --m.marioObj.header.gfx.animInfo.animFrameAccelAssist
-  o.header.gfx.scale.x = m.marioObj.header.gfx.scale.x
-  o.header.gfx.scale.y = m.marioObj.header.gfx.scale.y
-  o.header.gfx.scale.z = m.marioObj.header.gfx.scale.z
-end
-function afterimage_loop(o)
-  o.oOpacity = opacityMax - (o.oTimer * (opacityMax/AfterImageDuration))
-  o.header.gfx.animInfo.animAccel = -1
-  o.header.gfx.scale.x = o.header.gfx.scale.x * 1.02
-  o.header.gfx.scale.y = o.header.gfx.scale.y * 1.02
-  o.header.gfx.scale.z = o.header.gfx.scale.z * 1.02
-  if o.oTimer >= AfterImageDuration then
-    obj_mark_for_deletion(o)
-  end
-end
-id_bhvAfterImage = hook_behavior(nil, OBJ_LIST_UNIMPORTANT, true, afterimage_init, afterimage_loop, "bhvAfterImage")
 
 function mario_update_spin_input(m)
     local e = gJerStates[m.playerIndex]
@@ -219,7 +178,7 @@ local trickTable = {
 }
 local trickTableGrind = {
     [0] = {name = "Cartwheel",      anim = "jb_anim_trick_rail_1", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
-    [1] = {name = "Smooth Spin",    anim = "jb_anim_trick_rail_2", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
+    [1] = {name = "ReversO",        anim = "jb_anim_trick_rail_2", hand = MARIO_HAND_OPEN,      start = 0,  fin = 20},
     [2] = {name = "Roundhouse",     anim = "jb_anim_trick_rail_3", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
 }
 
@@ -508,6 +467,7 @@ local function act_rail_grind(m)
 
     play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
     spawn_mist_particles_variable(5, 0, 5)
+    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
     m.marioBodyState.handState = MARIO_HAND_OPEN
 
     if m.actionTimer == 0 and m.prevAction ~= ACT_RAIL_TRICK then
@@ -526,20 +486,32 @@ local function act_rail_grind(m)
         end
     end
 
-    if (m.actionTimer % 5) == 0 and m.actionTimer > 0 then
-        jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes")
+    if e.railTrick ~= 1 then
+        if (m.actionTimer % 5) == 0 then
+            jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes")
+        end
+    elseif (m.actionTimer % 4) == 0 then
+        jerComboAdd(m, e, 0, trickPoints["grind"], "Reverse Soaps")
     end
+
     if m.input & INPUT_A_PRESSED ~= 0 and m.actionTimer > 1 then
         set_mario_action(m, ACT_JUMP, 0)
         m.pos.y = m.pos.y + 5
     end
-    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
 
     if m.controller.buttonPressed & X_BUTTON ~= 0 then
         return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
     end
     if m.actionArg == 1 then
-        set_anim_to_frame(m, 20)
+        if e.railTrick ~= -1 then
+            set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
+            set_anim_to_frame(m, 40)
+            smlua_anim_util_set_animation(m.marioObj, trickTableGrind[e.railTrick].anim)
+        else
+            set_anim_to_frame(m, 20)
+        end
+    else
+        e.railTrick = -1
     end
 
     mario_set_forward_vel(m, e.boostSpeed)
@@ -590,19 +562,24 @@ local function act_rail_trick(m)
 
     play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
     set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
-    spawn_mist_particles_variable(5, 0, 5)
+    if m.prevAction == ACT_RAIL_GRIND then
+        spawn_mist_particles_variable(5, 0, 5)
+    else
+        set_mario_particle_flags(m, PARTICLE_DUST, 0)
+    end
 
     if m.actionTimer == 0 then
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         set_anim_to_frame(m, 0)
         play_character_sound(m, CHAR_SOUND_TRICK)
-        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name)
+        e.railTrick = m.actionArg
+        e.boostSpeed = m.forwardVel
     end
 
     smlua_anim_util_set_animation(m.marioObj, trickTableGrind[m.actionArg].anim)
     if m.marioObj.header.gfx.animInfo.animFrame == 19 then
-        return set_mario_action(m, ACT_RAIL_GRIND, 1)
+        return set_mario_action(m, m.prevAction, 1)
     end
 
     mario_set_forward_vel(m, e.boostSpeed)
@@ -610,6 +587,7 @@ local function act_rail_trick(m)
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_LEFT_GROUND then
         e.connectGrind = false
+        e.railTrick = -1
         m.vel.y = 10
         m.forwardVel = 40
         return set_mario_action(m, ACT_FREEFALL, 0)
@@ -621,8 +599,9 @@ local function act_rail_trick(m)
     local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, 30)
     local height = 10
 
-    if (checkA < height and checkB < height) then
+    if (checkA < height and checkB < height) and m.prevAction == ACT_RAIL_GRIND then
         e.connectGrind = false
+        e.railTrick = -1
         return set_mario_action(m, ACT_BRAKING, 0)
     end
 
@@ -707,6 +686,7 @@ local function jb_update(m)
         --m.slideVelZ = m.slideVelZ * 3
 
         if m.input & INPUT_Z_DOWN ~= 0 and m.pos.y == m.floorHeight then
+            e.railTrick = -1
             m.action = ACT_SLIDE_KICK_SLIDE
             set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
         end
@@ -729,6 +709,13 @@ local function jb_update(m)
                 e.gfxY = 0
                 e.fuel = e.fuel - fuelCost
             end
+        elseif m.controller.buttonPressed & X_BUTTON ~= 0 and m.forwardVel >= 30 then
+            set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
+        end
+
+        if e.railTrick ~= -1 then
+            smlua_anim_util_set_animation(m.marioObj, trickTableGrind[e.railTrick].anim)
+            set_anim_to_frame(m, 20)
         end
     end
     -- firsties
@@ -889,10 +876,19 @@ local function jb_set_action(m)
     if m.action == ACT_JUMP and m.forwardVel > 45 then
         m.actionArg = 73
     end
+    -- slide kick tricks reset
+    if m.prevAction == ACT_SLIDE_KICK_SLIDE and e.railTrick ~= -1 then
+        e.railTrick = -1
+        if m.action == ACT_FORWARD_ROLLOUT then
+            set_mario_action(m, ACT_JUMP, 0)
+        end
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_SET_MARIO_ACTION, jb_set_action)
 
 local function jb_before_set_action(m, act)
+    local e = gJerStates[m.playerIndex]
+
     if act == ACT_DOUBLE_JUMP or act == ACT_TRIPLE_JUMP then
         return ACT_JUMP
     elseif act == ACT_CROUCH_SLIDE then
@@ -900,6 +896,10 @@ local function jb_before_set_action(m, act)
     -- flying fix; idk if this is necessary cuz of custom twirling
     elseif act == ACT_FLYING then
         m.marioObj.header.gfx.angle.y = m.faceAngle.y
+    elseif act == ACT_SLIDE_KICK_SLIDE_STOP then
+        if e.railTrick ~= -1 then
+            return ACT_BRAKING_STOP
+        end
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_SET_MARIO_ACTION, jb_before_set_action)
