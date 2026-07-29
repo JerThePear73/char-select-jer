@@ -499,7 +499,7 @@ local function act_rail_grind(m)
         m.pos.y = m.pos.y + 5
     end
 
-    if m.controller.buttonPressed & X_BUTTON ~= 0 then
+    if m.controller.buttonPressed & X_BUTTON ~= 0 and m.forwardVel > 5 then
         return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
     end
     if m.actionArg == 1 then
@@ -524,11 +524,11 @@ local function act_rail_grind(m)
             m.actionArg = 0
             m.faceAngle.y = m.faceAngle.y - turn90*2
             m.marioObj.header.gfx.angle.y = m.faceAngle.y + 2*turn90
-            m.pos.y = m.pos.y - 100
-            m.vel.y = -15
+            m.pos.y = m.pos.y - 50
+            m.vel.y = -20
             m.forwardVel = 1
-            m.pos.x = m.pos.x - math.sin(m.faceAngle.y) * 4
-            m.pos.z = m.pos.z - math.cos(m.faceAngle.y) * 4
+            m.pos.x = m.pos.x - (5 * sins(m.faceAngle.y))
+            m.pos.z = m.pos.z - (5 * coss(m.faceAngle.y))
         else
             e.connectGrind = false
             m.vel.y = 10
