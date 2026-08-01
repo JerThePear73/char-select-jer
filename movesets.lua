@@ -41,6 +41,8 @@ for i = 0, MAX_PLAYERS - 1 do
         combo = 0,
         comboTimer = 0,
         comboOpacity = 0,
+        comboPhrase = "",
+        comboPhraseScale = 0,
         score = 0,
         trickName = "",
         connectGrind = false,
@@ -150,6 +152,30 @@ local trickPoints = {
     ["grind"]       = 1,
 }
 
+local comboPhrases = {
+    [0]  = "",
+    [1]  = "",
+    [2]  = "",
+    [3]  = "",
+    [4]  = "Not bad...",
+    [5]  = "Not bad...",
+    [6]  = "Gormful",
+    [7]  = "Gormful",
+    [8]  = "Gnarly!",
+    [9]  = "Gnarly!",
+    [10] = "Pimpin'",
+    [11] = "Pimpin'",
+    [12] = "Tubular!",
+    [13] = "Tubular!",
+    [14] = "SWEET!",
+    [15] = "SWEET!",
+    [16] = "WICKED!",
+    [17] = "WICKED!",
+    [18] = "DAYUMN!!",
+    [19] = "DAYUMN!!",
+    [20] = "Keep it up Baby!",
+}
+
 ---@class m gMarioStates
 ---@class e gJerStates
 ---@param addcombo integer (0 or 1) whether the trick increases your combo or not.
@@ -159,6 +185,8 @@ local function jerComboAdd(m, e, addcombo, addscore, name)
     e.combo = e.combo + addcombo
     if addcombo == 0 and e.combo == 0 then
         e.combo = 1
+    elseif addcombo == 1 and (e.combo <= #comboPhrases or e.combo == 100) then
+        e.comboPhraseScale = 0
     end
     e.comboTimer = comboTimerMax
     e.fuel = e.fuel + (addscore * e.combo)
@@ -172,7 +200,7 @@ end
 
 local trickTable = {
     [0] = {name = "Ankle Grab",     anim = "jb_anim_trick_1",   hand = MARIO_HAND_FISTS,        start = 0,  fin = 20},
-    [1] = {name = "Bicycle Kick",   anim = "jb_anim_trick_2",   hand = MARIO_HAND_OPEN,         start = 0,  fin = 20},
+    [1] = {name = "Helicopter",     anim = "jb_anim_trick_2",   hand = MARIO_HAND_OPEN,         start = 12, fin = 20},
     [2] = {name = "Skate Pro",      anim = "jb_anim_trick_3",   hand = 5,                       start = 0,  fin = 20},
     [3] = {name = "Shoot 4 The Sky",anim = "jb_anim_trick_4",   hand = MARIO_HAND_PEACE_SIGN,   start = 5,  fin = 12},
 }
@@ -833,6 +861,7 @@ local function jb_update(m)
             e.score = 0
         end
     end
+    e.comboPhraseScale = math.lerp(e.comboPhraseScale, 2, 0.2)
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
@@ -964,16 +993,31 @@ local function jb_hud()
         djui_hud_render_rect(halfW - 200, height - 110, (e.comboTimer/comboTimerMax)*400, 10)
         djui_hud_print_text(e.trickName, halfW - nameLength*12, height - 90, 2)
 
-        local comboLimit = math.clamp(e.combo, 0, 10)
-        local comboCol = math.clamp((comboLimit+0.2)*25, 0, 255)
+        local comboLimit = math.clamp(e.combo, 0, 20)
+        local comboCol = math.clamp((comboLimit)*12.75, 0, 255)
 
         --djui_hud_set_font(FONT_HUD)
         djui_hud_set_color(eCol.r, eCol.g, eCol.b, opacity)
         djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25, height - 185, 4)
         --djui_hud_set_font(FONT_RECOLOR_HUD)
-        djui_hud_set_color(comboCol, 255-comboCol, 255-(comboCol/2)+50, opacity)
+        if e.combo >= 100 then
+            djui_hud_set_color(255, 0, 0, opacity)
+        else
+            djui_hud_set_color(comboCol, 255-comboCol, 255-(comboCol/2)+50, opacity)
+        end
         djui_hud_print_text("x"..tostring(e.combo), halfW + 210, height - 135, 3)
-
+        if comboPhrases[e.combo] ~= "" then
+            local comboPhraseUse = ""
+            if e.combo <= #comboPhrases then
+                comboPhraseUse = comboPhrases[e.combo]
+            elseif e.combo >= 100 then
+                comboPhraseUse = "1000 YEARS OF BLOOD!!!"
+            else
+                comboPhraseUse = comboPhrases[#comboPhrases]
+            end
+            djui_hud_print_text(comboPhraseUse, halfW + 210, height - 180 - (e.comboPhraseScale - 2)*32, e.comboPhraseScale)
+        end
+        
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
