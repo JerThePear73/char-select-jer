@@ -493,6 +493,9 @@ local function act_rail_grind(m)
     local e = gJerStates[m.playerIndex]
     local intendedDYaw = convert_s16(m.intendedYaw - m.faceAngle.y)
 
+    --center_free_camera()
+    --center_rom_hack_camera()
+
     play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
     spawn_mist_particles_variable(5, 0, 5)
     set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
@@ -505,7 +508,7 @@ local function act_rail_grind(m)
             m.faceAngle.y = m.faceAngle.y - turn90
         end
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        e.boostSpeed = 60
+        e.boostSpeed = 45
         m.vel.x = 0
         m.vel.y = 0
         m.vel.z = 0
@@ -524,10 +527,11 @@ local function act_rail_grind(m)
 
     if m.input & INPUT_A_PRESSED ~= 0 and m.actionTimer > 1 then
         set_mario_action(m, ACT_JUMP, 0)
+        e.connectGrind = false
         m.pos.y = m.pos.y + 5
     end
 
-    if m.controller.buttonPressed & X_BUTTON ~= 0 and m.forwardVel > 5 then
+    if m.controller.buttonPressed & X_BUTTON ~= 0 and m.actionTimer > 1 then
         return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
     end
     if m.actionArg == 1 then
@@ -542,7 +546,11 @@ local function act_rail_grind(m)
         e.railTrick = -1
     end
 
-    mario_set_forward_vel(m, e.boostSpeed)
+    --mario_set_forward_vel(m, e.boostSpeed)
+    m.forwardVel = e.boostSpeed
+    m.pos.y = m.floorHeight
+    m.pos.x = m.pos.x + (e.boostSpeed * sins(m.faceAngle.y))
+    m.pos.z = m.pos.z + (e.boostSpeed * coss(m.faceAngle.y))
 
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_LEFT_GROUND then
@@ -592,8 +600,15 @@ local function act_rail_trick(m)
     set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
     if m.prevAction == ACT_RAIL_GRIND then
         spawn_mist_particles_variable(5, 0, 5)
+        m.pos.y = m.floorHeight
+        m.pos.x = m.pos.x + (e.boostSpeed * sins(m.faceAngle.y))
+        m.pos.z = m.pos.z + (e.boostSpeed * coss(m.faceAngle.y))
     else
+        if m.actionTimer == 0 then
+            e.boostSpeed = m.forwardVel
+        end
         set_mario_particle_flags(m, PARTICLE_DUST, 0)
+        mario_set_forward_vel(m, e.boostSpeed)
     end
 
     if m.actionTimer == 0 then
@@ -602,15 +617,12 @@ local function act_rail_trick(m)
         play_character_sound(m, CHAR_SOUND_TRICK)
         jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name)
         e.railTrick = m.actionArg
-        e.boostSpeed = m.forwardVel
     end
 
     smlua_anim_util_set_animation(m.marioObj, trickTableGrind[m.actionArg].anim)
     if m.marioObj.header.gfx.animInfo.animFrame == 19 then
         return set_mario_action(m, m.prevAction, 1)
     end
-
-    mario_set_forward_vel(m, e.boostSpeed)
 
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_LEFT_GROUND then
@@ -822,14 +834,14 @@ local function jb_update(m)
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
     -- rail grind
-    if m.action == ACT_LEDGE_GRAB and m.input & INPUT_NONZERO_ANALOG ~= 0 and m.floor.normal.y > 0.6 then
+    if m.action == ACT_LEDGE_GRAB and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > 0x2500 or m.floor.normal.y < 0.9063078) then
         if e.connectGrind then
             set_mario_action(m, ACT_RAIL_GRIND, 1)
-        elseif m.controller.buttonDown & A_BUTTON ~= 0 then
+        elseif m.input & INPUT_NONZERO_ANALOG ~= 0 then
             set_mario_action(m, ACT_RAIL_GRIND, 0)
         end
     end
-    if m.pos.y == m.floorHeight and (m.action ~= ACT_RAIL_GRIND and m.action ~= ACT_LEDGE_GRAB) then
+    if (m.action ~= ACT_RAIL_GRIND and m.action ~= ACT_FREEFALL and m.action ~= ACT_LEDGE_GRAB) then
         e.connectGrind = false
     end
 
@@ -969,6 +981,16 @@ local function jb_hud()
     --djui_hud_print_text(("m.actionArg = "..tostring(m.actionArg)), 75, 375, 1)
     --djui_hud_print_text(("animFrame = "..tostring(m.marioObj.header.gfx.animInfo.animFrame)), 75, 400, 1)
 
+    --if m.wall ~= nil then
+    --djui_hud_print_text(("m.wall.lowerY = "..tostring(m.wall.lowerY)), 75, 175, 1)
+    --djui_hud_print_text(("m.wall.upperY = "..tostring(m.wall.upperY)), 75, 200, 1)
+    --djui_hud_print_text(("m.wall.vertex1.x = "..tostring(m.wall.vertex1.x)), 700, 100, 1)
+    --djui_hud_print_text(("m.wall.vertex1.y = "..tostring(m.wall.vertex1.y)), 700, 125, 1)
+    --djui_hud_print_text(("m.wall.vertex1.z = "..tostring(m.wall.vertex1.z)), 700, 150, 1)
+    --djui_hud_print_text(("m.wall.vertex3.x = "..tostring(m.wall.vertex3.x)), 1000, 100, 1)
+    --djui_hud_print_text(("m.wall.vertex3.y = "..tostring(m.wall.vertex3.y)), 1000, 125, 1)
+    --djui_hud_print_text(("m.wall.vertex3.z = "..tostring(m.wall.vertex3.z)), 1000, 150, 1)
+    --end
 
 
 
@@ -976,7 +998,7 @@ local function jb_hud()
     local xOff = 20
     djui_hud_set_color(0, 0, 0, 255)
     djui_hud_render_rect(width - xOff - fuelMax*2, height - yOff, fuelMax*2, 30)
-    djui_hud_set_color(255, 255, 255, 255)
+    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 128)
     djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuel*2 - 8, 30 - 8)
     djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
     djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuelLerp*2 - 8, 30 - 8)
