@@ -16,6 +16,9 @@ end
 local ANGLE_QUEUE_SIZE = 9
 local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 
+local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
+local SOUND_JB_BAP = audio_sample_load("jb_sound_bap.ogg")
+
 local opacityMax = 200
 local stepFrame = 5
 local fuelMax = 0
@@ -181,7 +184,7 @@ local comboPhrases = {
 ---@param addcombo integer (0 or 1) whether the trick increases your combo or not.
 ---@param addscore integer amount of fuel to add from the trck. Multiplied by 10 for score.
 ---@param name string the name of the trick that will be displayed.
-local function jerComboAdd(m, e, addcombo, addscore, name)
+local function jerComboAdd(m, e, addcombo, addscore, name, dosound)
     e.combo = e.combo + addcombo
     if addcombo == 0 and e.combo == 0 then
         e.combo = 1
@@ -192,6 +195,11 @@ local function jerComboAdd(m, e, addcombo, addscore, name)
     e.fuel = e.fuel + (addscore * e.combo)
     e.score = e.score + (addscore * e.combo)*10
     e.trickName = name
+    if dosound == 1 then
+        audio_sample_play(SOUND_JB_BAP, m.pos, 1.5)
+    elseif dosound == 2 then
+        audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
+    end
 end
 
 ------------------
@@ -399,10 +407,10 @@ local function act_trick(m)
     m.peakHeight = m.pos.y
 
     if m.actionTimer == 0 then
-        play_character_sound(m, CHAR_SOUND_TRICK)
+        --play_character_sound(m, CHAR_SOUND_TRICK)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
-        jerComboAdd(m, e, 1, trickPoints["trick"], trickTable[m.actionArg].name)
+        jerComboAdd(m, e, 1, trickPoints["trick"], trickTable[m.actionArg].name, 1)
     end
 
     local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
@@ -439,6 +447,8 @@ local function act_break_down(m)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         play_character_sound(m, CHAR_SOUND_YAHOO)
         m.vel.y = 0
+    elseif m.actionTimer == 20 then
+        audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
     end
     if frame < 30 then
         if frame == 5 or frame == 10 then
@@ -478,7 +488,7 @@ local function act_break_down(m)
     if e.gfxY > 0x10000 then
         if m.forwardVel > 35 then
             play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
-            jerComboAdd(m, e, 0, trickPoints["breakdown"], "Break it Down")
+            jerComboAdd(m, e, 0, trickPoints["breakdown"], "Break it Down", 0)
         end
         e.gfxY = e.gfxY - 0x10000
     end
@@ -519,10 +529,10 @@ local function act_rail_grind(m)
 
     if e.railTrick ~= 1 then
         if (m.actionTimer % 5) == 0 then
-            jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes")
+            jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes", 0)
         end
     elseif (m.actionTimer % 4) == 0 then
-        jerComboAdd(m, e, 0, trickPoints["grind"], "Reverse Soaps")
+        jerComboAdd(m, e, 0, trickPoints["grind"], "Reverse Soaps", 0)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 and m.actionTimer > 1 then
@@ -615,7 +625,7 @@ local function act_rail_trick(m)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         set_anim_to_frame(m, 0)
         play_character_sound(m, CHAR_SOUND_TRICK)
-        jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name)
+        jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name, 1)
         e.railTrick = m.actionArg
     end
 
@@ -764,7 +774,7 @@ local function jb_update(m)
         if m.marioObj.header.gfx.animInfo.animFrame < 10 then
             set_mario_particle_flags(m, PARTICLE_SPARKLES, 0)
             if m.marioObj.header.gfx.animInfo.animFrame == 1 then
-                jerComboAdd(m, e, 1, trickPoints["firstie"], "Firstie")
+                jerComboAdd(m, e, 1, trickPoints["firstie"], "Firstie", 2)
             end
         end
     end
@@ -775,7 +785,7 @@ local function jb_update(m)
             m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
             m.vel.y = 25
             m.forwardVel = 45
-            jerComboAdd(m, e, 1, trickPoints["sledgekick"], "Sledge-Kick")
+            jerComboAdd(m, e, 1, trickPoints["sledgekick"], "Sledge-Kick", 2)
         end
         e.perfectTimer = e.perfectTimer + 1
     end
@@ -910,7 +920,7 @@ local function jb_set_action(m)
         if m.forwardVel > 45 then
             set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
             m.actionArg = 1
-            jerComboAdd(m, e, 1, trickPoints["speedkick"], "Speed-Kick")
+            jerComboAdd(m, e, 1, trickPoints["speedkick"], "Speed-Kick", 1)
         end
     end
     -- jump anim
