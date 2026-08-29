@@ -284,7 +284,7 @@ local function act_dash(m)
     if m.actionTimer > 0 and m.actionTimer < 4 then
         set_anim_to_frame(m, 0)
         m.vel.y = m.vel.y + 2
-    elseif m.actionTimer > 10 then
+    else
         if m.input & INPUT_B_PRESSED ~= 0 then
             set_mario_action(m, ACT_DIVE, 0)
         elseif m.input & INPUT_Z_PRESSED ~= 0 then
@@ -370,11 +370,16 @@ local function act_trick(m)
 
     m.peakHeight = m.pos.y
 
-    if m.actionTimer == 0 then
+    if m.actionState == 0 then
         --play_character_sound(m, CHAR_SOUND_TRICK)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
-        jerComboAdd(m, e, 1, trickPoints["trick"], trickTable[m.actionArg].name, 1)
+        local name = trickTable[m.actionArg].name
+        if m.prevAction & ACT_FLAG_AIR == 0 then
+            name = "Pop "..name
+        end
+        jerComboAdd(m, e, 1, trickPoints["trick"], name, 1)
+        m.actionState = m.actionState + 1
     end
 
     local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
@@ -395,7 +400,7 @@ local function act_trick(m)
     m.actionTimer = m.actionTimer + 1
     return 0
 end
-hook_mario_action(ACT_TRICK, act_trick)
+hook_mario_action(ACT_TRICK, act_trick, INT_KICK)
 
 local function act_break_down(m)
     local e = gJerStates[m.playerIndex]
@@ -442,8 +447,7 @@ local function act_break_down(m)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 then
-        m.pos.y = m.pos.y + 30
-        set_mario_action(m, ACT_JUMP, 0)
+        return set_mario_action(m, ACT_JUMP_KICK, 0)
     end
 
     if m.actionTimer > 29 then
@@ -509,7 +513,7 @@ local function act_rail_grind(m)
         return set_mario_action(m, ACT_JUMP, 0)
     end
 
-    if m.controller.buttonPressed & X_BUTTON ~= 0 and m.actionTimer > 1 then
+    if m.controller.buttonPressed & B_BUTTON ~= 0 and m.actionTimer > 1 then
         return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
     end
     if m.actionArg == 1 then
@@ -725,12 +729,12 @@ local function jb_update(m)
                 m.slideVelX = m.vel.x * 1.1
             end
             e.fuel = e.fuel - 1
-            if m.controller.buttonPressed & X_BUTTON ~= 0 and e.fuel > fuelCost then
+            if m.controller.buttonPressed & B_BUTTON ~= 0 and e.fuel > fuelCost then
                 set_mario_action(m, ACT_BREAK_DOWN, 0)
                 e.gfxY = 0
                 e.fuel = e.fuel - fuelCost
             end
-        elseif m.controller.buttonPressed & X_BUTTON ~= 0 and m.forwardVel >= 30 then
+        elseif m.controller.buttonPressed & B_BUTTON ~= 0 and m.forwardVel >= 30 then
             set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
         end
 
@@ -797,10 +801,6 @@ local function jb_update(m)
     if m.action == ACT_FLYING then
         e.gfxZ = math.lerp(e.gfxZ, 0, 0.1)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
-    end
-    -- tricks
-    if (commonAirActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR) and m.controller.buttonPressed & X_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 250) then
-        set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
     -- butt slide
     if m.action == ACT_BUTT_SLIDE and m.input & INPUT_Z_PRESSED ~= 0 then
@@ -912,6 +912,15 @@ local function jb_before_set_action(m, act)
         if e.railTrick ~= -1 then
             return ACT_BRAKING_STOP
         end
+    -- Set vanilla attacks to tricks
+    elseif act == ACT_JUMP_KICK or act == ACT_DIVE then
+        if m.action & ACT_FLAG_AIR == 0 then
+            local velTrade = math.max(m.forwardVel - 30, 0)*0.75
+            m.forwardVel = m.forwardVel - velTrade
+            m.vel.y = 50 + velTrade
+        end
+        m.actionTimer = 0
+        return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_SET_MARIO_ACTION, jb_before_set_action)

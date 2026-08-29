@@ -1,4 +1,4 @@
--- name: [CS]\\#00aa00\\Jer: \\#0088ff\\Boosted
+-- name: [CS] \\#00aa00\\Jer: \\#0088ff\\Boosted
 -- description: [CS]\\#00aa00\\Jer: \\#0088ff\\Boosted\n\\#ffffff\\By \\#008800\\JerThePear\n\n\\#ffffff\\The helmet man learned some new moves, and also found a jetpack. Now with 20% more Evilswag!\n\n\\#ff7777\\This Pack requires Character Select\nto use as a Library!
 
 local TEXT_MOD_NAME = "Jer: Boosted"
