@@ -16,8 +16,11 @@ end
 local ANGLE_QUEUE_SIZE = 9
 local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 
+local TEX_JB_IMPACT_FRAME = get_texture_info('jb-impact-frame')
+
 local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
 local SOUND_JB_BAP = audio_sample_load("jb_sound_bap.ogg")
+local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
 
 local opacityMax = 200
 local stepFrame = 5
@@ -660,6 +663,11 @@ local function act_force_stomp(m)
     if not o then return end
     if m.actionState == 0 then
         set_anim_to_frame(m, 0)
+        if m.actionArg == 1 then
+            audio_sample_stop(SOUND_JB_BAP)
+            audio_sample_stop(SOUND_JB_TRICK)
+            audio_sample_play(SOUND_JB_PARRY, m.pos, 1)
+        end
         m.actionState = 1
     elseif m.actionTimer < 10 then
         m.pos.x = o.oPosX
@@ -669,7 +677,11 @@ local function act_force_stomp(m)
         m.marioObj.header.gfx.pos.y = m.pos.y
         m.marioObj.header.gfx.pos.z = m.pos.z
     elseif m.actionTimer == 10 then
-        jerComboAdd(m, e, 0, trickPoints["forcestomp"], "Stompies", 2)
+        if m.actionArg == 1 then
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"] * 2, "LIMIT BREAK", 2)
+        elseif m.actionArg == 0 then
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"], "Stompies", 2)
+        end
         set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
         -- Emulate Ground Pound
         o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
@@ -975,7 +987,7 @@ local function jb_before_set_action(m, act)
             return ACT_BRAKING_STOP
         end
     -- Set vanilla attacks to tricks
-    elseif act == ACT_DIVE and m.action & ACT_FLAG_AIR ~= 0 then
+    elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and m.forwardVel < 0) then
         m.actionTimer = 0
         return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
@@ -1076,16 +1088,33 @@ local function jb_hud()
             end
             djui_hud_print_text(comboPhraseUse, halfW + 210, height - 180 - (e.comboPhraseScale - 2)*32, e.comboPhraseScale)
         end
-        
+    end
+
+    local posOut = gVec3fZero()
+
+    if m.action == ACT_FORCE_STOMP and m.actionArg == 1 and m.actionTimer <=3 then
+        djui_hud_world_pos_to_screen_pos({x = m.pos.x, y = m.pos.y - 50, z = m.pos.z}, posOut)
+        djui_hud_set_color(0, 0, 0, 255)
+        djui_hud_render_rect(0, 0, width, height)
+        djui_hud_set_color(255, 255, 255, 255)
+        djui_hud_render_texture(TEX_JB_IMPACT_FRAME, posOut.x - 384, posOut.y - 384, 1.5, 1.5)
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
 
 local function jb_interact(m, o, int)
     if m.action == ACT_FORCE_STOMP then return false end
-    if m.action == ACT_TRICK and obj_is_attackable(o) then
+    if m.action == ACT_TRICK and (obj_is_attackable(o) or obj_has_behavior_id(o, id_bhvBobomb) ~= 0) then
+        if m.prevAction == ACT_BREAK_DOWN then
+            set_mario_action(m, ACT_FORCE_STOMP, 1)
+        else
+            set_mario_action(m, ACT_FORCE_STOMP, 0)
+        end
+        if obj_has_behavior_id(o, id_bhvBobomb) ~= 0 then
+            o.oBobombFuseLit = 1
+            o.oBobombFuseTimer = 141
+        end
         m.interactObj = o
-        set_mario_action(m, ACT_FORCE_STOMP, 0)
         return false
     end
 end
