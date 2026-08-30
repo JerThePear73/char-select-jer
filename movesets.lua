@@ -1063,6 +1063,7 @@ local function jb_update(m)
         [ACT_RAIL_GRIND]        = true,
         [ACT_RAIL_TRICK]        = true,
         [ACT_LEDGE_GRAB]        = true,
+        [ACT_STOMACH_SLIDE]     = true,
     }
     if e.comboTimer > 0 then
         e.comboOpacity = comboOpacityMax
