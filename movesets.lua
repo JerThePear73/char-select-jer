@@ -7,7 +7,7 @@ local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_RAIL_TRICK = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
-local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
+local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -454,6 +454,9 @@ local function act_break_down(m)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 then
+        return set_mario_action(m, ACT_JUMP, 0)
+    elseif m.input & INPUT_B_PRESSED ~= 0 then
+        m.pos.y = m.pos.y + 5
         return set_mario_action(m, ACT_JUMP_KICK, 0)
     end
 
@@ -646,26 +649,29 @@ local function act_rail_trick(m)
 end
 hook_mario_action(ACT_RAIL_TRICK, act_rail_trick)
 
----@param m MarioState
 local function act_force_stomp(m)
     local e = gJerStates[m.playerIndex]
     local o = m.interactObj
+    set_mario_animation(m, MARIO_ANIM_GROUND_POUND_LANDING)
+    smlua_anim_util_set_animation(m.marioObj, "jb_anim_stomp")
     if not o then return end
-    if m.actionTimer < 10 then
-        set_mario_animation(m, MARIO_ANIM_CROUCHING)
+    if m.actionState == 0 then
+        set_anim_to_frame(m, 0)
+        m.actionState = 1
+    elseif m.actionTimer < 10 then
         m.pos.x = o.oPosX
         m.pos.y = o.oPosY + o.hitboxHeight
         m.pos.z = o.oPosZ
         m.marioObj.header.gfx.pos.x = m.pos.x
         m.marioObj.header.gfx.pos.y = m.pos.y
         m.marioObj.header.gfx.pos.z = m.pos.z
-        m.actionTimer = m.actionTimer + 1
-    else
+    elseif m.actionTimer == 10 then
         jerComboAdd(m, e, 0, trickPoints["forcestomp"], "Stompies", 2)
+        set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
         -- Emulate Ground Pound
         o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
         -- Calculate spring off velocity
-        local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 10
+        local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 0 -- the humble plus 10
         m.vel.y = vel * (1 - m.intendedMag/32*0.5)
         m.forwardVel = vel * (m.intendedMag/32)
         m.faceAngle.y = m.intendedYaw
@@ -673,10 +679,20 @@ local function act_force_stomp(m)
         e.canJernado = true
         e.canDash = true
         e.canBoost = true
-        return set_mario_action(m, ACT_FREEFALL, 0)
+        m.actionState = 2
+    else
+        local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, MARIO_ANIM_GROUND_POUND_LANDING, AIR_STEP_CHECK_LEDGE_GRAB)
+        if stepResult == AIR_STEP_GRABBED_LEDGE then
+            m.marioObj.header.gfx.animInfo.animID = -1
+        end
+        if m.input & INPUT_B_PRESSED ~= 0 then
+            set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
+        end
     end
-end
 
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
 hook_mario_action(ACT_FORCE_STOMP, act_force_stomp)
 
 -------------
@@ -804,19 +820,19 @@ local function jb_update(m)
         e.perfectTimer = e.perfectTimer + 1
     end
     -- air dash
-    if commonAirActions[m.action] and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight then
+    if (commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight then
         set_mario_action(m, ACT_DASH, 0)
         e.canDash = false
     end
     -- jernado
-    if (commonAirActions[m.action] or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
+    if ((commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
         if m.action ~= ACT_SIDE_FLIP or m.marioObj.header.gfx.animInfo.animFrame >= 10 then
             set_mario_action(m, ACT_JERNADO, 0)
             e.canJernado = false
         end
     end
     -- boost
-    if boostActions[m.action] and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 then
+    if (boostActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 then
         set_mario_action(m, ACT_BOOST, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         set_anim_to_frame(m, 0)
@@ -952,7 +968,7 @@ local function jb_before_set_action(m, act)
             return ACT_BRAKING_STOP
         end
     -- Set vanilla attacks to tricks
-    elseif act == ACT_JUMP_KICK or act == ACT_DIVE then
+    elseif (act == ACT_JUMP_KICK and m.action ~= ACT_LEDGE_GRAB) or act == ACT_DIVE then
         if m.action & ACT_FLAG_AIR == 0 then
             local velTrade = math.max(m.forwardVel - 30, 0)*0.75
             m.forwardVel = m.forwardVel - velTrade
@@ -1063,21 +1079,12 @@ local function jb_hud()
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
 
-local allowForceStomp = {
-    [id_bhvWoodenPost] = true
-}
-
--- Enemy Interaction with trick hitbox
----@param m MarioState
----@param o Object
----@param int InteractionType
-local function allow_interaction(m, o, int)
+local function jb_interact(m, o, int)
     if m.action == ACT_FORCE_STOMP then return false end
-    if m.action == ACT_TRICK and (obj_is_attackable(o) or allowForceStomp[get_id_from_behavior(o.behavior)]) then
+    if m.action == ACT_TRICK and obj_is_attackable(o) then
         m.interactObj = o
         set_mario_action(m, ACT_FORCE_STOMP, 0)
         return false
     end
 end
-
-_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, allow_interaction)
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, jb_interact)

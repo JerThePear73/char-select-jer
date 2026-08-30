@@ -218,7 +218,7 @@ local HANDTABLE_JB_JER = {
 --}
 
 if _G.charSelectExists then
-    CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with a love for speed. Press L to boost!"},
+    CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with that need for speed. Press L to boost!"},
         "JerThePear",
         {r = 000, g = 255, b = 000},
         E_MODEL_JB_JER,
