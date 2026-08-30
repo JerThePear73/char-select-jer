@@ -19,7 +19,7 @@ local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 local TEX_JB_IMPACT_FRAME = get_texture_info('jb-impact-frame')
 
 local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
-local SOUND_JB_BAP = audio_sample_load("jb_sound_bap.ogg")
+local SOUND_JB_BAP = audio_stream_load("jb_sound_bap.ogg")
 local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
 
 local opacityMax = 200
@@ -201,7 +201,8 @@ local function jerComboAdd(m, e, addcombo, addscore, name, dosound)
     e.score = e.score + (addscore * e.combo)*10
     e.trickName = name
     if dosound == 1 then
-        audio_sample_play(SOUND_JB_BAP, m.pos, 1.5)
+        audio_stream_play(SOUND_JB_BAP, true, 1)
+        audio_stream_set_frequency(SOUND_JB_BAP, (math.random(8, 12)/10))
     elseif dosound == 2 then
         audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
     end
@@ -460,10 +461,7 @@ local function act_break_down(m)
         return set_mario_action(m, ACT_FORWARD_ROLLOUT, 0)
     elseif m.input & INPUT_B_PRESSED ~= 0 then
         m.pos.y = m.pos.y + 5
-        local velTrade = math.max(m.forwardVel - 30, 0)*0.75
-        m.forwardVel = m.forwardVel - velTrade
-        m.vel.y = 50 + velTrade  
-        return set_mario_action(m, ACT_TRICK, 0)
+        return set_mario_action(m, ACT_DIVE, 0)
     end
 
     if m.actionTimer > 29 then
@@ -664,7 +662,7 @@ local function act_force_stomp(m)
     if m.actionState == 0 then
         set_anim_to_frame(m, 0)
         if m.actionArg == 1 then
-            audio_sample_stop(SOUND_JB_BAP)
+            audio_stream_stop(SOUND_JB_BAP)
             audio_sample_stop(SOUND_JB_TRICK)
             audio_sample_play(SOUND_JB_PARRY, m.pos, 1)
         end
@@ -988,6 +986,11 @@ local function jb_before_set_action(m, act)
         end
     -- Set vanilla attacks to tricks
     elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and m.forwardVel < 0) then
+        if m.action & ACT_FLAG_AIR == 0 then   
+            local velTrade = math.max(m.forwardVel - 30, 0)*0.75
+            m.forwardVel = m.forwardVel - velTrade
+            m.vel.y = 50 + velTrade  
+        end
         m.actionTimer = 0
         return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
@@ -1105,7 +1108,7 @@ _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hu
 local function jb_interact(m, o, int)
     if m.action == ACT_FORCE_STOMP then return false end
     if m.action == ACT_TRICK and (obj_is_attackable(o) or obj_has_behavior_id(o, id_bhvBobomb) ~= 0) then
-        if m.prevAction == ACT_BREAK_DOWN then
+        if m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35 then
             set_mario_action(m, ACT_FORCE_STOMP, 1)
         else
             set_mario_action(m, ACT_FORCE_STOMP, 0)
