@@ -7,6 +7,7 @@ local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_RAIL_TRICK = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
+local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -152,6 +153,7 @@ local trickPoints = {
     ["sledgekick"]  = 15,
     ["breakdown"]   = 2,
     ["grind"]       = 1,
+    ["forcestomp"]  = 10,
 }
 
 local comboPhrases = {
@@ -639,6 +641,40 @@ local function act_rail_trick(m)
 end
 hook_mario_action(ACT_RAIL_TRICK, act_rail_trick)
 
+---@param m MarioState
+local function act_force_stomp(m)
+    local e = gJerStates[m.playerIndex]
+    local o = m.interactObj
+    if not o then return end
+    if m.actionTimer < 10 then
+        set_mario_animation(m, MARIO_ANIM_CROUCHING)
+        m.pos.x = o.oPosX
+        m.pos.y = o.oPosY + o.hitboxHeight
+        m.pos.z = o.oPosZ
+        m.marioObj.header.gfx.pos.x = m.pos.x
+        m.marioObj.header.gfx.pos.y = m.pos.y
+        m.marioObj.header.gfx.pos.z = m.pos.z
+        m.actionTimer = m.actionTimer + 1
+    else
+        jerComboAdd(m, e, 1, trickPoints["forcestomp"], "Force Stomp", 2)
+        -- Emulate Ground Pound
+        o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
+        -- Calculate spring off velocity
+        local absVelY = math.abs(m.vel.y)
+        local absVelF = math.abs(m.forwardVel)
+        local vel = math.max(absVelF + absVelY*0.5, absVelY + absVelF*0.5)
+        m.vel.y = vel * (1 - m.intendedMag/32*0.5)
+        m.forwardVel = vel * (m.intendedMag/32)
+        m.faceAngle.y = m.intendedYaw
+        -- Reset Air Vars
+        e.canJernado = true
+        e.canDash = true
+        e.canBoost = true
+        return set_mario_action(m, ACT_FREEFALL, 0)
+    end
+end
+
+hook_mario_action(ACT_FORCE_STOMP, act_force_stomp)
 
 -------------
 -- UPDATES --
@@ -1023,3 +1059,22 @@ local function jb_hud()
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
+
+local allowForceStomp = {
+    [id_bhvWoodenPost] = true
+}
+
+-- Enemy Interaction with trick hitbox
+---@param m MarioState
+---@param o Object
+---@param int InteractionType
+local function allow_interaction(m, o, int)
+    if m.action == ACT_FORCE_STOMP then return false end
+    if m.action == ACT_TRICK and (obj_is_attackable(o) or allowForceStomp[get_id_from_behavior(o.behavior)]) then
+        m.interactObj = o
+        set_mario_action(m, ACT_FORCE_STOMP, 0)
+        return false
+    end
+end
+
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, allow_interaction)
