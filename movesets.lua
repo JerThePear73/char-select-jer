@@ -378,7 +378,7 @@ local function act_trick(m)
     m.peakHeight = m.pos.y
 
     if m.actionState == 0 then
-        --play_character_sound(m, CHAR_SOUND_TRICK)
+        play_character_sound(m, CHAR_SOUND_TRICK)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         local name = trickTable[m.actionArg].name
@@ -454,10 +454,13 @@ local function act_break_down(m)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 then
-        return set_mario_action(m, ACT_JUMP, 0)
+        return set_mario_action(m, ACT_FORWARD_ROLLOUT, 0)
     elseif m.input & INPUT_B_PRESSED ~= 0 then
         m.pos.y = m.pos.y + 5
-        return set_mario_action(m, ACT_JUMP_KICK, 0)
+        local velTrade = math.max(m.forwardVel - 30, 0)*0.75
+        m.forwardVel = m.forwardVel - velTrade
+        m.vel.y = 50 + velTrade  
+        return set_mario_action(m, ACT_TRICK, 0)
     end
 
     if m.actionTimer > 29 then
@@ -857,6 +860,10 @@ local function jb_update(m)
         e.gfxZ = math.lerp(e.gfxZ, 0, 0.1)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
     end
+    -- tricks
+    if (commonAirActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & B_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 250) then
+        set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
+    end
     -- butt slide
     if m.action == ACT_BUTT_SLIDE and m.input & INPUT_Z_PRESSED ~= 0 then
         set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 0)
@@ -968,12 +975,7 @@ local function jb_before_set_action(m, act)
             return ACT_BRAKING_STOP
         end
     -- Set vanilla attacks to tricks
-    elseif (act == ACT_JUMP_KICK and m.action ~= ACT_LEDGE_GRAB) or act == ACT_DIVE then
-        if m.action & ACT_FLAG_AIR == 0 then
-            local velTrade = math.max(m.forwardVel - 30, 0)*0.75
-            m.forwardVel = m.forwardVel - velTrade
-            m.vel.y = 50 + velTrade
-        end
+    elseif act == ACT_DIVE and m.action & ACT_FLAG_AIR ~= 0 then
         m.actionTimer = 0
         return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
