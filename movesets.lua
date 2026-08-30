@@ -658,6 +658,7 @@ local function act_force_stomp(m)
     local o = m.interactObj
     set_mario_animation(m, MARIO_ANIM_GROUND_POUND_LANDING)
     smlua_anim_util_set_animation(m.marioObj, "jb_anim_stomp")
+    m.marioBodyState.handState = MARIO_HAND_OPEN
     if not o then return end
     if m.actionState == 0 then
         set_anim_to_frame(m, 0)
@@ -782,8 +783,12 @@ local function jb_update(m)
             set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
         end
     end
-    if (m.action == ACT_JUMP_LAND or m.action == ACT_FREEFALL_LAND) and m.input & INPUT_Z_DOWN ~= 0 then
-        set_mario_action(m, ACT_SLIDE_KICK, 0)
+    if (m.action == ACT_JUMP_LAND or m.action == ACT_FREEFALL_LAND) then
+        if m.input & INPUT_Z_PRESSED ~= 0 then
+            set_mario_action(m, ACT_SLIDE_KICK, 0)
+        elseif m.input & INPUT_Z_DOWN ~= 0 then
+            set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 0)
+        end
     end
     -- break down
     if m.action == ACT_SLIDE_KICK_SLIDE then
@@ -985,7 +990,7 @@ local function jb_before_set_action(m, act)
             return ACT_BRAKING_STOP
         end
     -- Set vanilla attacks to tricks
-    elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and m.forwardVel < 0) then
+    elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and (m.input & INPUT_NONZERO_ANALOG ~= 0 and m.action ~= ACT_LEDGE_GRAB)) then
         if m.action & ACT_FLAG_AIR == 0 then   
             local velTrade = math.max(m.forwardVel - 30, 0)*0.75
             m.forwardVel = m.forwardVel - velTrade
