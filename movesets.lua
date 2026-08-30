@@ -661,7 +661,7 @@ local function act_force_stomp(m)
         m.marioObj.header.gfx.pos.z = m.pos.z
         m.actionTimer = m.actionTimer + 1
     else
-        jerComboAdd(m, e, 1, trickPoints["forcestomp"], "Force Stomp", 2)
+        jerComboAdd(m, e, 0, trickPoints["forcestomp"], "Stompies", 2)
         -- Emulate Ground Pound
         o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
         -- Calculate spring off velocity
