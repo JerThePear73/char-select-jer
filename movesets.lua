@@ -653,9 +653,178 @@ local function act_rail_trick(m)
 end
 hook_mario_action(ACT_RAIL_TRICK, act_rail_trick)
 
+local FORCE_STOMP_STATE_INIT = 0
+local FORCE_STOMP_STATE_STALL = 1
+local FORCE_STOMP_STATE_BOUNCE = 2
+
+local function bhv_force_stomp_genaric(m, e, o, state)
+    if state == FORCE_STOMP_STATE_INIT then
+
+    elseif state == FORCE_STOMP_STATE_STALL then
+        m.pos.x = o.oPosX
+        m.pos.y = o.oPosY + o.hitboxHeight
+        m.pos.z = o.oPosZ
+    elseif state == FORCE_STOMP_STATE_BOUNCE then
+        -- Emulate Ground Pound
+        o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
+        -- Calculate spring off velocity
+        local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 0 -- the humble plus 10
+        m.vel.y = vel * (1 - m.intendedMag/32*0.5)
+        m.forwardVel = vel * (m.intendedMag/32)
+        m.faceAngle.y = m.intendedYaw
+    end
+end
+
+---@param m MarioState
+local function bhv_force_stomp_bully(m, e, o, state)
+    if state == FORCE_STOMP_STATE_INIT then
+
+    elseif state == FORCE_STOMP_STATE_STALL then
+        m.pos.x = o.oPosX - sins(m.faceAngle.y)*o.hitboxRadius*0.5
+        m.pos.y = o.oPosY + o.hitboxHeight*0.75
+        m.pos.z = o.oPosZ - coss(m.faceAngle.y)*o.hitboxRadius*0.5
+        m.marioObj.header.gfx.angle.x = -0x2000
+    elseif state == FORCE_STOMP_STATE_BOUNCE then
+        -- Calculate spring off velocity
+        local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
+        o.oAction = BULLY_ACT_KNOCKBACK
+        o.oBullyMarioCollisionAngle = m.intendedYaw + 0x8000
+        o.oMoveAngleYaw = m.intendedYaw
+        o.oForwardVel = vel * (m.actionArg == 1 and 2 or 1)
+
+        m.vel.y = 30
+        m.forwardVel = -30
+        m.faceAngle.y = m.intendedYaw
+        if m.actionArg == 1 then
+            return "EVICTION NOTICE"
+        end
+    end
+end
+
+local forceStompBhvs = {
+    [id_bhvBobomb] = function (m, e, o, state)
+        if state == FORCE_STOMP_STATE_INIT then
+            o.oBobombFuseLit = 1
+            o.oBobombFuseTimer = 141
+        end
+        bhv_force_stomp_genaric(m, e, o, state)
+    end,
+    [id_bhvToadMessage] = function (m, e, o, state)
+
+        if state == FORCE_STOMP_STATE_STALL then
+            m.pos.x = o.oPosX
+            m.pos.y = o.oPosY + o.hitboxHeight
+            m.pos.z = o.oPosZ
+        elseif state == FORCE_STOMP_STATE_BOUNCE then
+            -- Calculate spring off velocity
+            local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 0 -- the humble plus 10
+            m.vel.y = vel * (1 - m.intendedMag/32*0.5)
+            m.forwardVel = vel * (m.intendedMag/32)
+            m.faceAngle.y = m.intendedYaw
+            if m.actionArg ~= 1 then
+                o.oPosY = o.oPosY - o.hitboxHeight*0.75
+                play_sound(gCharacters[CT_TOAD].soundAttacked, {x = o.oPosX, y = o.oPosY, z = o.oPosZ})
+            else
+                spawn_non_sync_object(id_bhvExplosion, E_MODEL_EXPLOSION, o.oPosX, o.oPosY, o.oPosZ, function(o)
+                
+                end)
+                play_sound(gCharacters[CT_TOAD].soundWaaaooow, {x = o.oPosX, y = o.oPosY, z = o.oPosZ})
+                obj_mark_for_deletion(o)
+            end
+
+            -- debug for fun
+            return "Friendly Fire"
+        end
+    end,
+    [id_bhvJumpingBox] = function(m, e, o, state)
+        if state == FORCE_STOMP_STATE_INIT then
+            o.oVelY = 50
+        elseif state == FORCE_STOMP_STATE_STALL then
+            m.pos.x = o.oPosX
+            m.pos.y = o.oPosY + o.hitboxHeight
+            m.pos.z = o.oPosZ
+        elseif state == FORCE_STOMP_STATE_BOUNCE then
+            -- Emulate Ground Pound
+            --o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
+            -- Calculate spring off velocity
+            local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 0 -- the humble plus 10
+            m.vel.y = vel * 2
+            m.forwardVel = 0
+            m.faceAngle.y = m.intendedYaw
+        end
+    end,
+    [id_bhvBowserBodyAnchor] = function(m, e, o, state)
+        local oBoswer = o.parentObj
+        if state == FORCE_STOMP_STATE_INIT then
+        elseif state == FORCE_STOMP_STATE_STALL then
+            m.pos.x = o.oPosX
+            m.pos.y = o.oPosY + o.hitboxHeight
+            m.pos.z = o.oPosZ
+            oBoswer.oVelY = 0
+        elseif state == FORCE_STOMP_STATE_BOUNCE then
+            if oBoswer.oAction ~= 19 and oBoswer.oAction ~= 4 and oBoswer.oAction ~= 12 then
+                oBoswer.oMoveFlags = 0
+                oBoswer.oSubAction = 0
+                oBoswer.oFaceAngleYaw = m.intendedYaw + 0x8000
+                oBoswer.oMoveAngleYaw = m.intendedYaw + 0x8000
+                if oBoswer.oAction == 1 and o.oPosY > find_floor(o.oPosX, o.oPosY, o.oPosZ) + 150 then
+                    -- Spike Bowser after pop
+                    m.vel.y = 30
+                    m.forwardVel = -30
+                    m.faceAngle.y = m.intendedYaw
+
+                    oBoswer.oVelY = -80
+                    oBoswer.oForwardVel = -80
+                else
+                    -- Pop bowser into the air
+                    m.vel.y = 100
+                    m.forwardVel = -30
+                    m.faceAngle.y = m.intendedYaw
+                    
+                    oBoswer.oAction = 1
+                    oBoswer.oVelY = 125
+                    oBoswer.oForwardVel = -30
+                end
+            else
+                m.vel.y = 30
+                m.forwardVel = -50
+            end
+        end
+    end,
+}
+
+local forceStompInteracts = {
+    [INTERACT_KOOPA] = bhv_force_stomp_genaric,
+    [INTERACT_BOUNCE_TOP] = bhv_force_stomp_genaric,
+    [INTERACT_BOUNCE_TOP2] = bhv_force_stomp_genaric,
+    [INTERACT_HIT_FROM_BELOW] = bhv_force_stomp_genaric,
+
+    [INTERACT_BULLY] = bhv_force_stomp_bully,
+}
+
+---@param o Object
+---@return function?
+-- Gets extra logic ran 
+local function obj_get_force_stomp_func(o)
+    --if not o then return end
+    if forceStompBhvs[get_id_from_behavior(o.behavior)] then
+        return forceStompBhvs[get_id_from_behavior(o.behavior)]
+    end
+    for int, func in pairs(forceStompInteracts) do
+        if o.oInteractType & int ~= 0 then
+            djui_chat_message_create("foundint")
+            return func
+        end
+    end
+end
+
+---@param m MarioState
 local function act_force_stomp(m)
     local e = gJerStates[m.playerIndex]
     local o = m.interactObj
+    if not o then return end
+    local forceStompFunc = obj_get_force_stomp_func(o) or bhv_force_stomp_genaric
+
     set_mario_animation(m, MARIO_ANIM_GROUND_POUND_LANDING)
     smlua_anim_util_set_animation(m.marioObj, "jb_anim_stomp")
     m.marioBodyState.handState = MARIO_HAND_OPEN
@@ -667,28 +836,18 @@ local function act_force_stomp(m)
             audio_sample_stop(SOUND_JB_TRICK)
             audio_sample_play(SOUND_JB_PARRY, m.pos, 1)
         end
+        forceStompFunc(m, e, o, FORCE_STOMP_STATE_INIT)
         m.actionState = 1
     elseif m.actionTimer < 10 then
-        m.pos.x = o.oPosX
-        m.pos.y = o.oPosY + o.hitboxHeight
-        m.pos.z = o.oPosZ
-        m.marioObj.header.gfx.pos.x = m.pos.x
-        m.marioObj.header.gfx.pos.y = m.pos.y
-        m.marioObj.header.gfx.pos.z = m.pos.z
+        forceStompFunc(m, e, o, FORCE_STOMP_STATE_STALL)
     elseif m.actionTimer == 10 then
-        if m.actionArg == 1 then
-            jerComboAdd(m, e, 0, trickPoints["forcestomp"] * 2, "LIMIT BREAK", 2)
-        elseif m.actionArg == 0 then
-            jerComboAdd(m, e, 0, trickPoints["forcestomp"], "Stompies", 2)
-        end
         set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
-        -- Emulate Ground Pound
-        o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
-        -- Calculate spring off velocity
-        local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 0 -- the humble plus 10
-        m.vel.y = vel * (1 - m.intendedMag/32*0.5)
-        m.forwardVel = vel * (m.intendedMag/32)
-        m.faceAngle.y = m.intendedYaw
+        local trickName = forceStompFunc(m, e, o, FORCE_STOMP_STATE_BOUNCE)
+        if m.actionArg == 1 then
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"] * 2, trickName and string.upper(trickName) or "LIMIT BREAK", 2)
+        elseif m.actionArg == 0 then
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"], trickName or "Stompies", 2)
+        end
         -- Reset Air Vars
         e.canJernado = true
         e.canDash = true
@@ -702,6 +861,12 @@ local function act_force_stomp(m)
         if m.input & INPUT_B_PRESSED ~= 0 then
             set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
         end
+    end
+
+    if m.actionState < 2 then
+        m.marioObj.header.gfx.pos.x = m.pos.x
+        m.marioObj.header.gfx.pos.y = m.pos.y
+        m.marioObj.header.gfx.pos.z = m.pos.z
     end
 
     m.actionTimer = m.actionTimer + 1
@@ -1123,19 +1288,12 @@ end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
 
 local function jb_interact(m, o, int)
-    if m.action == ACT_FORCE_STOMP then return false end
-    if m.action == ACT_TRICK and (obj_is_attackable(o) or obj_has_behavior_id(o, id_bhvBobomb) ~= 0) then
-        if m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35 then
-            set_mario_action(m, ACT_FORCE_STOMP, 1)
-        else
-            set_mario_action(m, ACT_FORCE_STOMP, 0)
-        end
-        if obj_has_behavior_id(o, id_bhvBobomb) ~= 0 then
-            o.oBobombFuseLit = 1
-            o.oBobombFuseTimer = 141
-        end
+    if m.action == ACT_TRICK and obj_get_force_stomp_func(o) then
+        local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
         m.interactObj = o
+        set_mario_action(m, ACT_FORCE_STOMP, crack and 1 or 0)
         return false
     end
+    if m.action == ACT_FORCE_STOMP then return false end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, jb_interact)
