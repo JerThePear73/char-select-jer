@@ -662,7 +662,7 @@ local function act_force_stomp(m)
         -- Calculate spring off velocity
         local absVelY = math.abs(m.vel.y)
         local absVelF = math.abs(m.forwardVel)
-        local vel = math.max(absVelF + absVelY*0.5, absVelY + absVelF*0.5)
+        local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 10
         m.vel.y = vel * (1 - m.intendedMag/32*0.5)
         m.forwardVel = vel * (m.intendedMag/32)
         m.faceAngle.y = m.intendedYaw
