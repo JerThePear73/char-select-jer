@@ -351,7 +351,12 @@ local function act_boost(m)
     if m.pos.y < (m.waterLevel + 50) then
         m.pos.y = m.waterLevel + 50
         m.vel.y = 0
-        set_mario_particle_flags(m, PARTICLE_SHALLOW_WATER_SPLASH, 0)
+        spawn_non_sync_object(id_bhvWaterSplash, E_MODEL_WATER_SPLASH, m.pos.x, m.waterLevel, m.pos.z, function(oSplash)
+        
+        end)
+        spawn_non_sync_object(id_bhvWaterSplash, E_MODEL_WATER_SPLASH, m.pos.x - m.vel.x*0.5, m.waterLevel, m.pos.z - m.vel.z*0.5, function(oSplash)
+        
+        end)
     elseif m.pos.y < (m.floorHeight + 50) then
         m.pos.y = m.floorHeight + 50
         m.vel.y = 0
@@ -660,8 +665,6 @@ local function act_force_stomp(m)
         -- Emulate Ground Pound
         o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
         -- Calculate spring off velocity
-        local absVelY = math.abs(m.vel.y)
-        local absVelF = math.abs(m.forwardVel)
         local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 10
         m.vel.y = vel * (1 - m.intendedMag/32*0.5)
         m.forwardVel = vel * (m.intendedMag/32)
