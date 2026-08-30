@@ -1100,12 +1100,24 @@ local function jb_hud()
 
     local posOut = gVec3fZero()
 
-    if m.action == ACT_FORCE_STOMP and m.actionArg == 1 and m.actionTimer <=3 then
-        djui_hud_world_pos_to_screen_pos({x = m.pos.x, y = m.pos.y - 50, z = m.pos.z}, posOut)
-        djui_hud_set_color(0, 0, 0, 255)
-        djui_hud_render_rect(0, 0, width, height)
-        djui_hud_set_color(255, 255, 255, 255)
-        djui_hud_render_texture(TEX_JB_IMPACT_FRAME, posOut.x - 384, posOut.y - 384, 1.5, 1.5)
+    if m.action == ACT_FORCE_STOMP and m.actionArg == 1 then
+        if m.actionTimer <=5 then
+            djui_hud_world_pos_to_screen_pos({x = m.pos.x, y = m.pos.y - 50, z = m.pos.z}, posOut)
+            --djui_hud_set_color(0, 0, 0, 255)
+            --djui_hud_render_rect(0, 0, width, height)
+            set_shader_flag_value(SHADER_FLAG_SATURATION, 0)
+            set_shader_flag_value(SHADER_FLAG_EXPOSURE, 0.25)
+            set_shader_flag_value(SHADER_FLAG_CONTRAST, 10)
+            set_shader_flag_enabled(SHADER_FLAG_SATURATION, true)
+            set_shader_flag_enabled(SHADER_FLAG_EXPOSURE, true)
+            set_shader_flag_enabled(SHADER_FLAG_CONTRAST, true)
+            djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
+            djui_hud_render_texture(TEX_JB_IMPACT_FRAME, posOut.x - 384, posOut.y - 384, 1.5, 1.5)
+        else
+            set_shader_flag_enabled(SHADER_FLAG_SATURATION, false)
+            set_shader_flag_enabled(SHADER_FLAG_EXPOSURE, false)
+            set_shader_flag_enabled(SHADER_FLAG_CONTRAST, false)
+        end
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
