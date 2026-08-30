@@ -812,7 +812,6 @@ local function obj_get_force_stomp_func(o)
     end
     for int, func in pairs(forceStompInteracts) do
         if o.oInteractType & int ~= 0 then
-            djui_chat_message_create("foundint")
             return func
         end
     end
