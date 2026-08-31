@@ -1,4 +1,4 @@
--- name: [CS]\\#00aa00\\Jer: \\#0088ff\\Boosted
+-- name: [CS] \\#00aa00\\Jer: \\#0088ff\\Boosted
 -- description: [CS]\\#00aa00\\Jer: \\#0088ff\\Boosted\n\\#ffffff\\By \\#008800\\JerThePear\n\n\\#ffffff\\The helmet man learned some new moves, and also found a jetpack. Now with 20% more Evilswag!\n\n\\#ff7777\\This Pack requires Character Select\nto use as a Library!
 
 local TEXT_MOD_NAME = "Jer: Boosted"
@@ -218,7 +218,7 @@ local HANDTABLE_JB_JER = {
 --}
 
 if _G.charSelectExists then
-    CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with a love for speed. Press L to boost!"},
+    CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with that need for speed. Press L to boost!"},
         "JerThePear",
         {r = 000, g = 255, b = 000},
         E_MODEL_JB_JER,
