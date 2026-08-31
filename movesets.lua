@@ -27,7 +27,7 @@ local stepFrame = 5
 local fuelMax = 0
 local fuelMaxInc = 100
 local fuelCost = 25
-local comboTimerMax = 15
+local comboTimerMax = 35
 local comboOpacityMax = 10
 local turn90 = degrees_to_sm64(90)
 
