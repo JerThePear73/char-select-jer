@@ -3,6 +3,7 @@ if not _G.charSelectExists then return end
 local ACT_JERNADO = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 local ACT_DASH = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BOOST = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
+local ACT_VERT_BOOST = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
@@ -375,6 +376,40 @@ local function act_boost(m)
     return 0
 end
 hook_mario_action(ACT_BOOST, act_boost)
+
+local function act_vert_boost(m)
+    local e = gJerStates[m.playerIndex]
+
+    play_sound_with_freq_scale(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject, 1.025)
+    set_mario_particle_flags(m, PARTICLE_FIRE, 0)
+    m.marioBodyState.handState = MARIO_HAND_OPEN
+
+    if m.actionState == 0 then
+        m.vel.y = 70
+        e.gfxY = 0x10000
+        e.canBoost = false
+        m.actionState = m.actionState + 1
+    end
+    e.gfxY = math.lerp(e.gfxY, 0, 0.2)
+
+    local stepResult = common_air_action_step(m, ACT_BRAKING, MARIO_ANIM_DOUBLE_JUMP_FALL, AIR_STEP_CHECK_LEDGE_GRAB)
+    if stepResult == AIR_STEP_HIT_WALL then
+        return set_mario_action(m, ACT_AIR_HIT_WALL, 0)
+    elseif stepResult == AIR_STEP_GRABBED_LEDGE then
+        m.marioObj.header.gfx.animInfo.animID = -1
+    end
+    m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
+
+    m.peakHeight = m.pos.y
+
+    if m.vel.y <= 0 then
+        return set_mario_action(m, ACT_FREEFALL, 0)
+    end
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_VERT_BOOST, act_vert_boost)
 
 local function act_trick(m)
     local e = gJerStates[m.playerIndex]
@@ -978,6 +1013,12 @@ local function jb_update(m)
         if e.railTrick ~= -1 then
             smlua_anim_util_set_animation(m.marioObj, trickTableGrind[e.railTrick].anim)
             set_anim_to_frame(m, 20)
+        end
+    end
+    if m.action == ACT_GROUND_POUND then
+        if e.canBoost and m.controller.buttonDown & L_TRIG ~= 0 and e.fuel > fuelCost then
+            set_mario_action(m, ACT_VERT_BOOST, 0)
+            e.fuel = e.fuel - fuelCost
         end
     end
     -- firsties
