@@ -8,6 +8,7 @@ local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING 
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_RAIL_TRICK = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
+local ACT_SCREW_SPIN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -29,7 +30,9 @@ local fuelMaxInc = 100
 local fuelCost = 25
 local comboTimerMax = 35
 local comboOpacityMax = 10
+local railGrindRange = 0x2800
 local turn90 = degrees_to_sm64(90)
+local loaded = false
 
 local gJerStates = {}
 --local function jer_jess_reset_extra_states(index)
@@ -53,6 +56,7 @@ for i = 0, MAX_PLAYERS - 1 do
         trickName = "",
         railDir = 0,
         railTrick = -1,
+        screwSpeed = 0,
         gfxX = 0,
         gfxY = 0,
         gfxZ = 0,
@@ -653,6 +657,87 @@ local function act_rail_trick(m)
 end
 hook_mario_action(ACT_RAIL_TRICK, act_rail_trick)
 
+local function act_screw_spin(m)
+    local e = gJerStates[m.playerIndex]
+    local o = m.interactObj
+    if not o then return end
+    set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
+    smlua_anim_util_set_animation(m.marioObj, "jb_anim_stomp")
+    set_anim_to_frame(m, 0)
+    perform_ground_step(m)
+
+    if m.actionState == 0 then
+        e.canJernado = true
+        e.canBoost = true
+        e.canDash = true
+        e.screwSpeed = 1500 * (1 - m.actionArg)
+        m.vel.x = 0
+        m.vel.y = 0
+        m.vel.z = 0
+        m.actionState = 1
+        if m.actionArg == 1 then
+            audio_stream_stop(SOUND_JB_BAP)
+            audio_sample_stop(SOUND_JB_TRICK)
+            audio_sample_play(SOUND_JB_PARRY, m.pos, 1)
+        end
+    end
+
+    m.pos.x = o.oPosX
+    m.pos.z = o.oPosZ
+    m.pos.y = o.oPosY + 191
+
+    e.gfxY = e.gfxY + e.screwSpeed
+    if e.screwSpeed > 1600 then
+        o.oWoodenPostOffsetY = o.oWoodenPostOffsetY - e.screwSpeed/2000
+    end
+    if m.actionArg == 1 and m.actionTimer == 6 then
+        e.screwSpeed = 10000
+    end
+
+    m.marioObj.header.gfx.pos.x = m.pos.x
+    m.marioObj.header.gfx.pos.y = m.pos.y - 4
+    m.marioObj.header.gfx.pos.z = m.pos.z
+
+    if o.oWoodenPostOffsetY < -190 then
+        o.oWoodenPostOffsetY = -190
+        set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
+        play_sound(SOUND_GENERAL_POUND_WOOD_POST, m.marioObj.header.gfx.cameraToObject) -- SOUND_GENERAL_BIG_POUND
+        if m.actionArg == 1 then
+            m.vel.y = 120
+            m.faceAngle.y = e.gfxY
+            set_mario_action(m, ACT_FORCE_STOMP, 1)
+        elseif m.actionArg == 0 then
+            m.faceAngle.y = e.gfxY
+            set_mario_action(m, ACT_BACKFLIP, 0)
+        end
+    end
+
+    if m.actionArg == 0 then
+        if m.input & INPUT_A_PRESSED ~= 0 then
+            m.pos.y = m.pos.y + 10
+            m.faceAngle.y = m.intendedYaw
+            m.forwardVel = 0
+            set_mario_action(m, ACT_JUMP, 0)
+        elseif m.input & INPUT_B_PRESSED ~= 0 then
+            play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
+            set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
+            e.screwSpeed = e.screwSpeed + 3000
+        else
+            e.screwSpeed = math.lerp(e.screwSpeed, 1500, 0.1)
+        end
+    elseif m.actionArg == 1 then
+        play_sound(SOUND_AIR_HEAVEHO_MOVE, m.marioObj.header.gfx.cameraToObject)
+        if (m.actionTimer % 4) == 0 then
+            set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
+        end
+    end
+
+    m.marioObj.header.gfx.angle.y = e.gfxY
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_SCREW_SPIN, act_screw_spin)
+
 local FORCE_STOMP_STATE_INIT = 0
 local FORCE_STOMP_STATE_STALL = 1
 local FORCE_STOMP_STATE_BOUNCE = 2
@@ -662,8 +747,10 @@ local function bhv_force_stomp_genaric(m, e, o, state)
 
     elseif state == FORCE_STOMP_STATE_STALL then
         m.pos.x = o.oPosX
-        m.pos.y = o.oPosY + o.hitboxHeight
         m.pos.z = o.oPosZ
+        if obj_has_behavior_id(o, id_bhvWoodenPost) == 0 then
+            m.pos.y = o.oPosY + o.hitboxHeight
+        end
     elseif state == FORCE_STOMP_STATE_BOUNCE then
         -- Emulate Ground Pound
         o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
@@ -675,10 +762,9 @@ local function bhv_force_stomp_genaric(m, e, o, state)
     end
 end
 
----@param m MarioState
 local function bhv_force_stomp_bully(m, e, o, state)
     if state == FORCE_STOMP_STATE_INIT then
-
+        o.oForwardVel = 0
     elseif state == FORCE_STOMP_STATE_STALL then
         m.pos.x = o.oPosX - sins(m.faceAngle.y)*o.hitboxRadius*0.5
         m.pos.y = o.oPosY + o.hitboxHeight*0.75
@@ -689,8 +775,9 @@ local function bhv_force_stomp_bully(m, e, o, state)
         local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
         o.oAction = BULLY_ACT_KNOCKBACK
         o.oBullyMarioCollisionAngle = m.intendedYaw + 0x8000
-        o.oMoveAngleYaw = m.intendedYaw
-        o.oForwardVel = vel * (m.actionArg == 1 and 2 or 1)
+        o.oMoveAngleYaw = m.intendedYaw + 0x8000
+        o.oVelY = 10
+        o.oForwardVel = vel * (m.actionArg == 1 and 2 or 1) * -1
 
         m.vel.y = 30
         m.forwardVel = -30
@@ -745,7 +832,11 @@ local forceStompBhvs = {
             m.pos.z = o.oPosZ
         elseif state == FORCE_STOMP_STATE_BOUNCE then
             -- Emulate Ground Pound
-            --o.oInteractStatus = ATTACK_GROUND_POUND_OR_TWIRL + (INT_STATUS_INTERACTED | INT_STATUS_WAS_ATTACKED)
+            for i=0, 4 do
+                spawn_sync_object(id_bhvSingleCoinGetsSpawned, E_MODEL_YELLOW_COIN, o.oPosX, o.oPosY, o.oPosZ, nil)
+            end
+            obj_mark_for_deletion(o)
+            set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
             -- Calculate spring off velocity
             local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2) + 0 -- the humble plus 10
             m.vel.y = vel * 2
@@ -791,6 +882,9 @@ local forceStompBhvs = {
             end
         end
     end,
+    [id_bhvWoodenPost] = function (m, e, o, state)
+        bhv_force_stomp_genaric(m, e, o, state)
+    end,
 }
 
 local forceStompInteracts = {
@@ -817,7 +911,6 @@ local function obj_get_force_stomp_func(o)
     end
 end
 
----@param m MarioState
 local function act_force_stomp(m)
     local e = gJerStates[m.playerIndex]
     local o = m.interactObj
@@ -845,7 +938,7 @@ local function act_force_stomp(m)
         if m.actionArg == 1 then
             jerComboAdd(m, e, 0, trickPoints["forcestomp"] * 2, trickName and string.upper(trickName) or "LIMIT BREAK", 2)
         elseif m.actionArg == 0 then
-            jerComboAdd(m, e, 0, trickPoints["forcestomp"], trickName or "Stompies", 2)
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"], trickName or "Boot Fuel", 2)
         end
         -- Reset Air Vars
         e.canJernado = true
@@ -921,10 +1014,17 @@ local function jb_update(m)
     else
         fuelMax = fuelMaxInc
     end
+    if loaded == false then
+        if m.numStars >= 30 then
+            e.fuel = 300
+        end
+        loaded = true
+    end
+
+    -- alt jump
     if m.action == ACT_JUMP and m.actionArg == 73 then
         smlua_anim_util_set_animation(m.marioObj, "jb_anim_single_jump_big")
     end
-
     -- running tilt
     if m.action == ACT_WALKING then
         if get_global_timer() % stepFrame == 0 and m.forwardVel > 29 and m.pos.y > m.waterLevel then
@@ -1051,6 +1151,14 @@ local function jb_update(m)
     if m.action == ACT_FLUTTER_KICK and m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_FLUTTERKICK then
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
+    -- wodden posts
+    local o = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvWoodenPost)
+    local bhv = get_behavior_from_id(id_bhvWoodenPost)
+    if cur_obj_dist_to_nearest_object_with_behavior(bhv) < 300 and m.action == ACT_TRICK then
+        local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
+        m.interactObj = o
+        set_mario_action(m, ACT_SCREW_SPIN, crack and 1 or 0)
+    end
 
 
     -- hud calcs
@@ -1134,7 +1242,7 @@ local function jb_set_action(m)
     end
 
     -- rail grind
-    if m.action == ACT_LEDGE_GRAB and m.prevAction ~= ACT_LEDGE_CLIMB_DOWN and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > 0x2500 or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
+    if m.action == ACT_LEDGE_GRAB and m.prevAction ~= ACT_LEDGE_CLIMB_DOWN and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > railGrindRange or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
         return set_mario_action(m, ACT_RAIL_GRIND, 0)
     end
 end
@@ -1193,6 +1301,7 @@ local function jb_hud()
     local eCol = network_player_get_override_palette_color(gNetworkPlayers[0], EMBLEM)
 
     -- DEBUG HUD
+    --djui_hud_print_text(("e.screwSpeed = "..tostring(e.screwSpeed)), 75, 175, 1)
     --djui_hud_print_text(("e.fuel = "..tostring(e.fuel)), 75, 200, 1)
     --djui_hud_print_text(("e.combo = "..tostring(e.combo)), 75, 225, 1)
     --djui_hud_print_text(("m.floor.normal.x = "..tostring(m.floor.normal.x)), 75, 250, 1)
@@ -1265,8 +1374,8 @@ local function jb_hud()
 
     local posOut = gVec3fZero()
 
-    if m.action == ACT_FORCE_STOMP and m.actionArg == 1 then
-        if m.actionTimer <=5 then
+    if (m.action == ACT_FORCE_STOMP or m.action == ACT_SCREW_SPIN) and m.actionArg == 1 then
+        if m.actionTimer <= 5 then
             djui_hud_world_pos_to_screen_pos({x = m.pos.x, y = m.pos.y - 50, z = m.pos.z}, posOut)
             --djui_hud_set_color(0, 0, 0, 255)
             --djui_hud_render_rect(0, 0, width, height)
