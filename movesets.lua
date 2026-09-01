@@ -161,6 +161,7 @@ local trickPoints = {
     ["breakdown"]   = 2,
     ["grind"]       = 1,
     ["forcestomp"]  = 10,
+    ["screw"]       = 1,
 }
 
 local comboPhrases = {
@@ -385,7 +386,7 @@ local function act_trick(m)
 
     m.peakHeight = m.pos.y
 
-    if m.actionState == 0 then
+    if m.actionTimer == 1 then
         play_character_sound(m, CHAR_SOUND_TRICK)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
@@ -394,7 +395,6 @@ local function act_trick(m)
             name = "Pop "..name
         end
         jerComboAdd(m, e, 1, trickPoints["trick"], name, 1)
-        m.actionState = m.actionState + 1
     end
 
     local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
@@ -462,7 +462,9 @@ local function act_break_down(m)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 then
-        return set_mario_action(m, ACT_FORWARD_ROLLOUT, 0)
+        m.pos.y = m.pos.y + 5
+        m.vel.y = 30
+        return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     elseif m.input & INPUT_B_PRESSED ~= 0 then
         m.pos.y = m.pos.y + 5
         return set_mario_action(m, ACT_DIVE, 0)
@@ -722,6 +724,7 @@ local function act_screw_spin(m)
             play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
             set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
             e.screwSpeed = e.screwSpeed + 3000
+            jerComboAdd(m, e, 0, trickPoints["screw"], "Around The World", 0)
         else
             e.screwSpeed = math.lerp(e.screwSpeed, 1500, 0.1)
         end
@@ -729,6 +732,7 @@ local function act_screw_spin(m)
         play_sound(SOUND_AIR_HEAVEHO_MOVE, m.marioObj.header.gfx.cameraToObject)
         if (m.actionTimer % 4) == 0 then
             set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
+            jerComboAdd(m, e, 0, trickPoints["screw"], "CYCLONE", 0)
         end
     end
 
@@ -1154,7 +1158,7 @@ local function jb_update(m)
     -- wodden posts
     local o = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvWoodenPost)
     local bhv = get_behavior_from_id(id_bhvWoodenPost)
-    if cur_obj_dist_to_nearest_object_with_behavior(bhv) < 300 and m.action == ACT_TRICK then
+    if cur_obj_dist_to_nearest_object_with_behavior(bhv) < 300 and m.action == ACT_TRICK and o.oWoodenPostOffsetY > -190 then
         local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
         m.interactObj = o
         set_mario_action(m, ACT_SCREW_SPIN, crack and 1 or 0)
