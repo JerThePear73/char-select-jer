@@ -389,7 +389,16 @@ local function act_trick(m)
 
     if m.actionTimer == 1 then
         play_character_sound(m, CHAR_SOUND_TRICK)
-        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        --set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        local color = network_player_get_override_palette_color(gNetworkPlayers[0], EMBLEM)
+        local triAnimState = 1
+        if color.r > color.g + color.b then
+            triAnimState = 0
+        end
+        if color.b > color.g + color.r then
+            triAnimState = 2
+        end
+        spawn_triangle_break_particles(10, 139, 0.3, triAnimState);
         m.marioObj.header.gfx.animInfo.animID = -1
         local name = trickTable[m.actionArg].name
         if m.prevAction & ACT_FLAG_AIR == 0 then
@@ -832,7 +841,6 @@ local forceStompBhvs = {
                 obj_mark_for_deletion(o)
             end
 
-            -- debug for fun
             return "Friendly Fire"
         end
     end,
@@ -879,6 +887,7 @@ local forceStompBhvs = {
 
                     oBoswer.oVelY = -80
                     oBoswer.oForwardVel = -80
+                    return "Bada-Boom!"
                 else
                     -- Pop bowser into the air
                     m.vel.y = 100
@@ -888,10 +897,12 @@ local forceStompBhvs = {
                     oBoswer.oAction = 1
                     oBoswer.oVelY = 125
                     oBoswer.oForwardVel = -30
+                    return "Bada-Bing"
                 end
             else
                 m.vel.y = 30
                 m.forwardVel = -50
+                return "Nice try Idiot"
             end
         end
     end,
