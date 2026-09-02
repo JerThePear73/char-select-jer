@@ -31,7 +31,7 @@ local fuelMaxInc = 100
 local fuelCost = 25
 local comboTimerMax = 35
 local comboOpacityMax = 10
-local railGrindRange = 0x2800
+local railGrindRange = 0x2000
 local turn90 = degrees_to_sm64(90)
 local loaded = false
 local id_bhvMasterCapBox = get_id_from_behavior_name("bhvMasterCapBox")
@@ -73,7 +73,7 @@ for i = 0, MAX_PLAYERS - 1 do
     for j=0,(ANGLE_QUEUE_SIZE-1) do gJerStates[i].angleDeltaQueue[j] = 0 end
 end
 
-function mario_update_spin_input(m)
+function mario_update_spin_input(m) -- taken from extended moveset
     local e = gJerStates[m.playerIndex]
     local rawAngle = atan2s(-m.controller.stickY, m.controller.stickX)
     e.spinInput = 0
@@ -392,12 +392,10 @@ local function act_trick(m)
     if m.actionTimer == 1 then
         play_character_sound(m, CHAR_SOUND_TRICK)
         --set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        local color = network_player_get_override_palette_color(gNetworkPlayers[0], EMBLEM)
-        local triAnimState = 1
-        if color.r > color.g + color.b then
-            triAnimState = 0
-        end
-        if color.b > color.g + color.r then
+        local triAnimState = 0
+        if e.combo < 7 then
+            triAnimState = 1
+        elseif e.combo < 19 then
             triAnimState = 2
         end
         spawn_triangle_break_particles(10, 139, 0.3, triAnimState);
@@ -639,7 +637,14 @@ local function act_rail_trick(m)
     end
 
     if m.actionTimer == 0 then
-        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        --set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        local triAnimState = 0
+        if e.combo < 7 then
+            triAnimState = 1
+        elseif e.combo < 19 then
+            triAnimState = 2
+        end
+        spawn_triangle_break_particles(10, 139, 0.3, triAnimState);
         set_anim_to_frame(m, 0)
         play_character_sound(m, CHAR_SOUND_TRICK)
         jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name, 1)
@@ -664,7 +669,6 @@ local function act_rail_trick(m)
     local checkA = m.pos.y - find_floor_height_relative_polar(m, turn90, 30)
     local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, 30)
     local height = 10
-
     if (checkA < height and checkB < height) and m.prevAction == ACT_RAIL_GRIND then
         e.railTrick = -1
         return set_mario_action(m, ACT_BRAKING, 0)
@@ -883,6 +887,7 @@ local forceStompBhvs = {
                 oBoswer.oMoveAngleYaw = m.intendedYaw + 0x8000
                 if oBoswer.oAction == 1 and o.oPosY > find_floor(o.oPosX, o.oPosY, o.oPosZ) + 150 then
                     -- Spike Bowser after pop
+                    play_character_sound(m, CHAR_SOUND_SO_LONGA_BOWSER)
                     m.vel.y = 30
                     m.forwardVel = -30
                     m.faceAngle.y = m.intendedYaw
@@ -1294,6 +1299,9 @@ local function jb_set_action(m)
             set_mario_action(m, ACT_JUMP, 0)
         end
     end
+    if m.action == ACT_SLIDE_KICK_SLIDE and m.prevAction == ACT_SLIDE_KICK then
+        e.railTrick = -1
+    end
 
     -- rail grind
     if m.action == ACT_LEDGE_GRAB and m.prevAction ~= ACT_LEDGE_CLIMB_DOWN and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > railGrindRange or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
@@ -1391,7 +1399,7 @@ local function jb_hud()
 
     djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
     djui_hud_set_font(FONT_RECOLOR_HUD)
-    local kph = ""..string.format("%.0f", m.forwardVel).." KPH"
+    local kph = ""..string.format("%.0f", math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)).." KPH"
     djui_hud_print_text(kph, width - 40 - (#kph * 3 * 12), height - 240, 3, 3)
 
     local randomOffsetX = math.round(math.random(0-e.score, e.score)/10000)
