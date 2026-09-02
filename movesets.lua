@@ -20,8 +20,9 @@ local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 local TEX_JB_IMPACT_FRAME = get_texture_info('jb-impact-frame')
 
 local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
-local SOUND_JB_BAP = audio_stream_load("jb_sound_bap.ogg")
 local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
+local SOUND_JB_BAP = audio_stream_load("jb_sound_bap.ogg")
+local SOUND_JB_CROWD = audio_stream_load("jb_sound_crowd.ogg")
 
 local opacityMax = 200
 local stepFrame = 5
@@ -33,6 +34,7 @@ local comboOpacityMax = 10
 local railGrindRange = 0x2800
 local turn90 = degrees_to_sm64(90)
 local loaded = false
+local id_bhvMasterCapBox = get_id_from_behavior_name("bhvMasterCapBox")
 
 local gJerStates = {}
 --local function jer_jess_reset_extra_states(index)
@@ -898,6 +900,28 @@ local forceStompBhvs = {
     [id_bhvWoodenPost] = function (m, e, o, state)
         bhv_force_stomp_genaric(m, e, o, state)
     end,
+    [id_bhvMasterCapBox] = function (m, e, o, state)
+        if state == FORCE_STOMP_STATE_INIT then
+            o.oForwardVel = 0
+        elseif state == FORCE_STOMP_STATE_STALL then
+            m.faceAngle.y = o.oFaceAngleYaw + 0x8000
+            m.pos.x = o.oPosX - sins(m.faceAngle.y)*o.hitboxRadius*0.6
+            m.pos.y = o.oPosY + o.hitboxHeight*0.75
+            m.pos.z = o.oPosZ - coss(m.faceAngle.y)*o.hitboxRadius*0.6
+            m.marioObj.header.gfx.angle.x = -0x4000
+            m.marioObj.header.gfx.angle.y = m.faceAngle.y
+        elseif state == FORCE_STOMP_STATE_BOUNCE then
+            -- Calculate spring off velocity
+            o.oAction = 3
+            audio_stream_play(SOUND_JB_CROWD, false, 0.7)
+            jerComboAdd(m, e, 0, 300, "Start Your Engines!", 0)
+            m.vel.y = 30
+            m.forwardVel = -15
+            m.faceAngle.y = m.intendedYaw
+        end
+
+        return "Start Your Engines!"
+    end,
 }
 
 local forceStompInteracts = {
@@ -1165,13 +1189,18 @@ local function jb_update(m)
     if m.action == ACT_FLUTTER_KICK and m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_FLUTTERKICK then
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
-    -- wodden posts
-    local o = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvWoodenPost)
-    local bhv = get_behavior_from_id(id_bhvWoodenPost)
-    if cur_obj_dist_to_nearest_object_with_behavior(bhv) < 300 and m.action == ACT_TRICK and o.oWoodenPostOffsetY > -190 then
+    -- wooden posts
+    local nearestWoodPost = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvWoodenPost)
+    if cur_obj_dist_to_nearest_object_with_behavior(get_behavior_from_id(id_bhvWoodenPost)) < 300 and m.action == ACT_TRICK and nearestWoodPost.oWoodenPostOffsetY > -190 then
         local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
-        m.interactObj = o
+        m.interactObj = nearestWoodPost
         set_mario_action(m, ACT_SCREW_SPIN, crack and 1 or 0)
+    end
+    -- master cap
+    if cur_obj_dist_to_nearest_object_with_behavior(get_behavior_from_id(id_bhvMasterCapBox)) < 400 and m.action == ACT_TRICK then
+        local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
+        m.interactObj = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvMasterCapBox)
+        set_mario_action(m, ACT_FORCE_STOMP, crack and 1 or 0)
     end
 
 
