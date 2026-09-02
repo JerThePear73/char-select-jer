@@ -314,6 +314,7 @@ hook_mario_action(ACT_DASH, act_dash)
 
 local function act_boost(m)
     local e = gJerStates[m.playerIndex]
+    local metalCheck = m.flags & MARIO_METAL_CAP ~= 0
 
     play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
     set_mario_particle_flags(m, PARTICLE_FIRE, 0)
@@ -351,7 +352,7 @@ local function act_boost(m)
     end
 
     m.vel.y = math.clamp((m.vel.y + 3), -20, 0)
-    e.boostSpeed = math.clamp((e.boostSpeed + 1), 30, 73)
+    e.boostSpeed = math.clamp((e.boostSpeed + 1), 30, metalCheck and 100 or 73)
     m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
     m.marioObj.header.gfx.pos.y = m.pos.y - 50
     m.peakHeight = m.pos.y
@@ -420,6 +421,7 @@ hook_mario_action(ACT_TRICK, act_trick, INT_KICK)
 local function act_break_down(m)
     local e = gJerStates[m.playerIndex]
     local frame = m.marioObj.header.gfx.animInfo.animFrame
+    local metalCheck = m.flags & MARIO_METAL_CAP ~= 0
 
     e.prevPosY = m.pos.y
 
@@ -456,7 +458,7 @@ local function act_break_down(m)
         m.vel.y = 5
     end
 
-    e.boostSpeed = math.clamp((e.boostSpeed - 0.2 + (e.prevPosY - m.pos.y)/10), 15, 110)
+    e.boostSpeed = math.clamp((e.boostSpeed - 0.2 + (e.prevPosY - m.pos.y)/(metalCheck and 5 or 10)), 15, metalCheck and 150 or 110)
     if e.boostSpeed == 15 then
         set_mario_action(m, ACT_BUTT_SLIDE_STOP, 0)
     end
@@ -535,6 +537,13 @@ local function act_rail_grind(m)
 
     if m.controller.buttonPressed & B_BUTTON ~= 0 and m.actionTimer > 1 then
         return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
+    --elseif m.controller.buttonDown & L_TRIG ~= 0 then
+        --e.boostSpeed = math.lerp(e.boostSpeed, 80, 0.1)
+        --play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
+        --set_mario_particle_flags(m, PARTICLE_FIRE, 0)
+        --e.fuel = e.fuel - 1
+    else
+        e.boostSpeed = math.lerp(e.boostSpeed, 45, 0.2)
     end
     if m.actionArg == 1 then
         if e.railTrick ~= -1 then
@@ -1004,6 +1013,7 @@ local boostActions = {
 
 local function jb_update(m)
     local e = gJerStates[m.playerIndex]
+    local capCheck = m.flags & MARIO_CAP_ON_HEAD ~= 0
 
     e.fuel = math.clamp(e.fuel, 0, fuelMax)
     e.fuelLerp = math.lerp(e.fuelLerp, e.fuel, 0.2)
@@ -1062,7 +1072,7 @@ local function jb_update(m)
     if m.action == ACT_SLIDE_KICK_SLIDE then
                 m.slideVelZ = m.slideVelZ * 1.05
                 m.slideVelX = m.slideVelX * 1.05
-        if m.controller.buttonDown & L_TRIG ~= 0 and e.fuel > 0 and m.forwardVel > 0 then
+        if m.controller.buttonDown & L_TRIG ~= 0 and e.fuel > 0 and m.forwardVel > 0 and capCheck then
             play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
             set_mario_particle_flags(m, PARTICLE_FIRE, 0)
             if m.forwardVel < 73 then
@@ -1106,7 +1116,7 @@ local function jb_update(m)
         e.perfectTimer = e.perfectTimer + 1
     end
     -- air dash
-    if (commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight then
+    if (commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight and capCheck then
         set_mario_action(m, ACT_DASH, 0)
         e.canDash = false
     end
@@ -1118,7 +1128,7 @@ local function jb_update(m)
         end
     end
     -- boost
-    if (boostActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 then
+    if (boostActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 and capCheck then
         set_mario_action(m, ACT_BOOST, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         set_anim_to_frame(m, 0)
@@ -1135,7 +1145,7 @@ local function jb_update(m)
         m.marioBodyState.handState = MARIO_HAND_OPEN
     end
     --wing cap
-    if m.action == ACT_DIVE and m.prevAction ~= ACT_GROUND_POUND and m.flags & MARIO_WING_CAP ~= 0 and m.vel.y < 0 and m.pos.y > (m.floorHeight + 100) then
+    if m.action == ACT_BOOST and m.flags & MARIO_WING_CAP ~= 0 and m.input & INPUT_B_PRESSED ~= 0 then
         m.action = ACT_FLYING
         e.gfxZ = 0x10000
     end
@@ -1328,15 +1338,24 @@ local function jb_hud()
     --end
 
 
+    if m.flags & MARIO_CAP_ON_HEAD ~= 0 then
+        local yOff = 40
+        local xOff = 20
+        djui_hud_set_color(0, 0, 0, 255)
+        djui_hud_render_rect(width - xOff - fuelMax*2, height - yOff, fuelMax*2, 30)
+        djui_hud_set_color(eCol.r, eCol.g, eCol.b, 128)
+        djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuel*2 - 8, 30 - 8)
+        djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
+        djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuelLerp*2 - 8, 30 - 8)
+    end
 
-    local yOff = 40
-    local xOff = 20
-    djui_hud_set_color(0, 0, 0, 255)
-    djui_hud_render_rect(width - xOff - fuelMax*2, height - yOff, fuelMax*2, 30)
-    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 128)
-    djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuel*2 - 8, 30 - 8)
     djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
-    djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuelLerp*2 - 8, 30 - 8)
+    djui_hud_set_font(FONT_RECOLOR_HUD)
+    local kph = ""..string.format("%.0f", m.forwardVel).." KPH"
+    djui_hud_print_text(kph, width - 40 - (#kph * 3 * 12), height - 240, 3, 3)
+
+    local randomOffsetX = math.round(math.random(0-e.score, e.score)/10000)
+    local randomOffsetY = math.round(math.random(0-e.score, e.score)/10000)
 
     if e.comboOpacity > 0 then
         local opacity = ((e.comboOpacity/comboOpacityMax) * 255)
@@ -1345,24 +1364,24 @@ local function jb_hud()
         local scoreLength = #tostring(e.score)
         djui_hud_set_font(FONT_RECOLOR_HUD)
         djui_hud_set_color(0, 0, 0, opacity)
-        djui_hud_render_rect(halfW - 200, height - 110, 400, 10)
+        djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, 400, 10)
         djui_hud_set_color(255, 255, 255, opacity)
-        djui_hud_render_rect(halfW - 200, height - 110, (e.comboTimer/comboTimerMax)*400, 10)
-        djui_hud_print_text(e.trickName, halfW - nameLength*12, height - 90, 2)
+        djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, (e.comboTimer/comboTimerMax)*400, 10)
+        djui_hud_print_text(e.trickName, halfW - nameLength*12 + randomOffsetX, height - 90 + randomOffsetY, 2)
 
         local comboLimit = math.clamp(e.combo, 0, 20)
         local comboCol = math.clamp((comboLimit)*12.75, 0, 255)
 
         --djui_hud_set_font(FONT_HUD)
         djui_hud_set_color(eCol.r, eCol.g, eCol.b, opacity)
-        djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25, height - 185, 4)
+        djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25 + randomOffsetX, height - 185 + randomOffsetY, 4)
         --djui_hud_set_font(FONT_RECOLOR_HUD)
         if e.combo >= 100 then
             djui_hud_set_color(255, 0, 0, opacity)
         else
             djui_hud_set_color(comboCol, 255-comboCol, 255-(comboCol/2)+50, opacity)
         end
-        djui_hud_print_text("x"..tostring(e.combo), halfW + 210, height - 135, 3)
+        djui_hud_print_text("x"..tostring(e.combo), halfW + 210 + randomOffsetX, height - 135 + randomOffsetY, 3)
         if comboPhrases[e.combo] ~= "" then
             local comboPhraseUse = ""
             if e.combo <= #comboPhrases then
@@ -1372,7 +1391,7 @@ local function jb_hud()
             else
                 comboPhraseUse = comboPhrases[#comboPhrases]
             end
-            djui_hud_print_text(comboPhraseUse, halfW + 210, height - 180 - (e.comboPhraseScale - 2)*32, e.comboPhraseScale)
+            djui_hud_print_text(comboPhraseUse, halfW + 210 + randomOffsetX, height - 180 - (e.comboPhraseScale - 2)*32 + randomOffsetY, e.comboPhraseScale)
         end
     end
 
