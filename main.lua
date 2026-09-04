@@ -22,8 +22,11 @@ local TEX_ART_JB_JER = get_texture_info('jb-graffiti-jer')
 -- Sound --
 local SOUND_MENU_THEME_JB_JER = audio_stream_load('jb_menu_theme.ogg')
 
-CHAR_SOUND_TRICK    = CHAR_SOUND_MAX + 1
-CHAR_SOUND_YEEHAW   = CHAR_SOUND_MAX + 2
+CHAR_SOUND_TRICK_1  = CHAR_SOUND_MAX + 1
+CHAR_SOUND_TRICK_2  = CHAR_SOUND_MAX + 2
+CHAR_SOUND_YEEHAW   = CHAR_SOUND_MAX + 3
+CHAR_SOUND_SPINJUMP = CHAR_SOUND_MAX + 4
+CHAR_SOUND_GIDDY    = CHAR_SOUND_MAX + 5
 
 VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego Racers (1999)
     [CHAR_SOUND_ATTACKED] = {'jb_jer_no.ogg', 'jb_jer_ouch.ogg'},
@@ -38,7 +41,7 @@ VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego
     [CHAR_SOUND_HAHA] = 'jb_jer_yeah_jazzy.ogg',
     [CHAR_SOUND_HAHA_2] = 'jb_jer_yeah_jazzy.ogg',
     [CHAR_SOUND_HERE_WE_GO] = 'jb_jer_yeah.ogg', -- getting star/power up
-    [CHAR_SOUND_HOOHOO] = 'jb_jer_heyhey.ogg',
+    [CHAR_SOUND_HOOHOO] = 'jb_jer_heyhey.ogg', -- double jump/slide kick
     [CHAR_SOUND_HRMM] = 'jb_jer_mmf.ogg', -- lifting
     [CHAR_SOUND_IMA_TIRED] = nil,
     [CHAR_SOUND_MAMA_MIA] = 'jb_jer_ohno.ogg',
@@ -55,7 +58,7 @@ VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego
     [CHAR_SOUND_SNORING1] = 'jb_jer_snore1.ogg',
     [CHAR_SOUND_SNORING2] = 'jb_jer_snore2.ogg',
     [CHAR_SOUND_SNORING3] = nil,
-    [CHAR_SOUND_TWIRL_BOUNCE] = 'jb_jer_yeehaw.ogg',
+    [CHAR_SOUND_TWIRL_BOUNCE] = {'jb_jer_yeehaw.ogg', 'jb_jer_eeah.ogg'},
     [CHAR_SOUND_UH] = 'jb_jer_oh.ogg', -- wall bonk
     [CHAR_SOUND_UH2] = 'jb_jer_mmf.ogg', -- landing long jump
     [CHAR_SOUND_UH2_2] = 'jb_jer_mmf.ogg', -- same as uh2 maybe??
@@ -64,12 +67,15 @@ VOICETABLE_JB_JER = { -- Voices from Scooter and other male characters from Lego
     [CHAR_SOUND_WHOA] = 'jb_jer_woah.ogg',
     [CHAR_SOUND_YAHOO] = {'jb_jer_woohoo.ogg', 'jb_jer_yippee.ogg'},
     [CHAR_SOUND_YAWNING] = nil,
-    [CHAR_SOUND_YAHOO_WAHA_YIPPEE] = {'jb_jer_woohoo.ogg', 'jb_jer_yippee.ogg'},
+    [CHAR_SOUND_YAHOO_WAHA_YIPPEE] = {'jb_jer_woohoo.ogg', 'jb_jer_yippee.ogg', 'jb_jer_heeyaw.ogg'},
     [CHAR_SOUND_YAH_WAH_HOO] = {'jb_jer_ha.ogg', 'jb_jer_hoh.ogg'},
     [CHAR_SOUND_OKEY_DOKEY] = 'jb_jer_yeah_jazzy.ogg',
     --CHAR_SOUND_MAX
-    [CHAR_SOUND_TRICK] = {'jb_jer_yeah.ogg', 'jb_jer_hiya.ogg', 'jb_jer_yeah_jazzy.ogg'},
+    [CHAR_SOUND_TRICK_1] = {'jb_jer_yeah.ogg', 'jb_jer_hiya.ogg', 'jb_jer_yeah_jazzy.ogg'},
+    [CHAR_SOUND_TRICK_2] = {'jb_jer_woohoo.ogg', 'jb_jer_yippee.ogg'},
     [CHAR_SOUND_YEEHAW] = {'jb_jer_heeyaw.ogg', 'jb_jer_yeehaw.ogg'},
+    [CHAR_SOUND_SPINJUMP] = {'jb_jer_eeah.ogg', 'jb_jer_woohoo.ogg', 'jb_jer_yippee.ogg'},
+    [CHAR_SOUND_GIDDY] = 'jb_jer_giddyup.ogg',
 }
 
 local PALETTES_JB_JER = {
@@ -79,7 +85,7 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "85642c",
         [GLOVES] = "305e3d",
         [SHOES]  = "ffffff",
-        [HAIR]   = "462c1e",
+        [HAIR]   = "FFBC00",
         [SKIN]   = "ffc2ab",
         [CAP]    = "4c4c4c",
         [EMBLEM] = "00ff00",
@@ -89,7 +95,7 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "4d642c",
         [GLOVES] = "888888",
         [SHOES]  = "4c4c4c",
-        [HAIR]   = "461b1e",
+        [HAIR]   = "79ff00",
         [SKIN]   = "ffc2ab",
         [CAP]    = "4c4c4c",
         [EMBLEM] = "79ff00",
@@ -99,7 +105,7 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "822f27",
         [GLOVES] = "33363e",
         [SHOES]  = "822f27",
-        [HAIR]   = "9b4b1e",
+        [HAIR]   = "ffffff",
         [SKIN]   = "ffc2ab",
         [CAP]    = "2d5674",
         [EMBLEM] = "ffffff",
@@ -109,7 +115,7 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "555050",
         [GLOVES] = "ff6e32",
         [SHOES]  = "282832",
-        [HAIR]   = "9b4b1e",
+        [HAIR]   = "282832",
         [SKIN]   = "ffc2ab",
         [CAP]    = "282828",
         [EMBLEM] = "ff5014",
@@ -119,7 +125,7 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "2e353c",
         [GLOVES] = "ffffff",
         [SHOES]  = "ffffff",
-        [HAIR]   = "523c37",
+        [HAIR]   = "2b9a35",
         [SKIN]   = "ffc2ab",
         [CAP]    = "2b9a35",
         [EMBLEM] = "ffffff",
@@ -129,7 +135,7 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "be0064",
         [GLOVES] = "ffffff",
         [SHOES]  = "00b694",
-        [HAIR]   = "00643c",
+        [HAIR]   = "ff6e32",
         [SKIN]   = "ffc2ab",
         [CAP]    = "00b694",
         [EMBLEM] = "00b694",
@@ -139,10 +145,40 @@ local PALETTES_JB_JER = {
         [SHIRT]  = "42521e",
         [GLOVES] = "ff7600",
         [SHOES]  = "ff7600",
-        [HAIR]   = "332627",
+        [HAIR]   = "ab1b27",
         [SKIN]   = "cb8966",
         [CAP]    = "ab1b27",
         [EMBLEM] = "ab1b27",
+    },{
+        name = "Sprint Sister",
+        [PANTS]  = "7195ac",
+        [SHIRT]  = "c2ffff",
+        [GLOVES] = "c2ffff",
+        [SHOES]  = "ff2e41",
+        [HAIR]   = "c2ffff",
+        [SKIN]   = "ffba90",
+        [CAP]    = "ff2e41",
+        [EMBLEM] = "c2ffff",
+    },{
+        name = "Citrus Circuit",
+        [PANTS]  = "3c5521",
+        [SHIRT]  = "ff701f",
+        [GLOVES] = "8bae27",
+        [SHOES]  = "8bae27",
+        [HAIR]   = "ff701f",
+        [SKIN]   = "ffc2ab",
+        [CAP]    = "3c5521",
+        [EMBLEM] = "8bae27",
+    },{
+        name = "Desert Dweller",
+        [PANTS]  = "302d44",
+        [SHIRT]  = "771f81",
+        [GLOVES] = "36b94b",
+        [SHOES]  = "ae6d34",
+        [HAIR]   = "36b94b",
+        [SKIN]   = "fec179",
+        [CAP]    = "302d44",
+        [EMBLEM] = "36b94b",
     },
 }
 
@@ -170,8 +206,6 @@ local ANIMTABLE_JB_JER = {
     [MARIO_ANIM_TRIPLE_JUMP_LAND]       = "jb_anim_tada",
     [MARIO_ANIM_GENERAL_FALL]           = "jb_anim_fall",
     [MARIO_ANIM_GENERAL_LAND]           = "jb_anim_land",
-    [MARIO_ANIM_RUNNING]                = "jb_anim_run",
-    [MARIO_ANIM_SINGLE_JUMP]            = "jb_anim_single_jump",
     [MARIO_ANIM_LAND_FROM_SINGLE_JUMP]  = "jb_anim_land_single_jump",
     [MARIO_ANIM_LAND_FROM_DOUBLE_JUMP]  = "jb_anim_land_double_jump",
     [MARIO_ANIM_SLIDE_KICK]             = "jb_anim_slide_kick",
@@ -179,6 +213,19 @@ local ANIMTABLE_JB_JER = {
     [MARIO_ANIM_RIDING_SHELL]           = "jb_anim_shell_ride_land",
     [MARIO_ANIM_JUMP_RIDING_SHELL]      = "jb_anim_shell_ride_jump",
     [MARIO_ANIM_HANDSTAND_JUMP]         = "jb_anim_single_jump_big",
+    [MARIO_ANIM_SINGLE_JUMP]            = function(m, frame)
+                                            if m.actionArg == 73 then
+                                                return "jb_anim_single_jump_big"
+                                            else
+                                                return "jb_anim_single_jump"
+                                            end
+                                        end,
+    [MARIO_ANIM_RUNNING]                = function(m, frame)
+                                            if get_global_timer() % 5 == 0 and m.forwardVel > 29 and m.pos.y > m.waterLevel then
+                                                m.particleFlags = m.particleFlags | PARTICLE_DUST
+                                            end
+                                            return "jb_anim_run"
+                                        end,
 }
 
 local EYETABLE_JB_JER = {

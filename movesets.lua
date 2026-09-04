@@ -6,9 +6,9 @@ local ACT_BOOST = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_
 local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
-local ACT_RAIL_TRICK = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
 local ACT_SCREW_SPIN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
+local ACT_SPINJUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -24,20 +24,28 @@ local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
 local SOUND_JB_BAP = audio_stream_load("jb_sound_bap.ogg")
 local SOUND_JB_CROWD = audio_stream_load("jb_sound_crowd.ogg")
 
-local opacityMax = 200
-local stepFrame = 5
 local fuelMax = 0
 local fuelMaxInc = 100
 local fuelCost = 25
 local comboTimerMax = 35
 local comboOpacityMax = 10
 local railGrindRange = 0x2000
+local minTrickHeight = 250
 local turn90 = degrees_to_sm64(90)
 local loaded = false
+local betterCoins = false
 local id_bhvMasterCapBox = get_id_from_behavior_name("bhvMasterCapBox")
 
+local function better_coins_compat()
+    for _,mods in pairs(gActiveMods) do
+        if mods.name == "Better Coins" then
+            betterCoins = true
+        end
+    end
+end
+hook_event(HOOK_ON_MODS_LOADED, better_coins_compat)
+
 local gJerStates = {}
---local function jer_jess_reset_extra_states(index)
 for i = 0, MAX_PLAYERS - 1 do
     gJerStates[i] = {
         --index = network_global_index_from_local(0),
@@ -171,22 +179,22 @@ local comboPhrases = {
     [1]  = "",
     [2]  = "",
     [3]  = "",
-    [4]  = "Not bad...",
-    [5]  = "Not bad...",
-    [6]  = "Gormful",
-    [7]  = "Gormful",
-    [8]  = "Gnarly!",
-    [9]  = "Gnarly!",
-    [10] = "Pimpin'",
+    [4]  = "Alright...",
+    [5]  = "Not Bad...",
+    [6]  = "Subpar...",
+    [7]  = "Dude, What?",
+    [8]  = "Awesome???",
+    [9]  = "Gormful",
+    [10] = "Gnarly!'",
     [11] = "Pimpin'",
     [12] = "Tubular!",
-    [13] = "Tubular!",
-    [14] = "SWEET!",
-    [15] = "SWEET!",
-    [16] = "WICKED!",
-    [17] = "WICKED!",
-    [18] = "DAYUMN!!",
-    [19] = "DAYUMN!!",
+    [13] = "Diggin' it!",
+    [14] = "SWEET!!",
+    [15] = "DAYUMN!!!",
+    [16] = "EVILSWAG!!!!",
+    [17] = "BOMB AS HELL!",
+    [18] = "DANCE BABY YEAH!",
+    [19] = "ALL CITY!",
     [20] = "Keep it up Baby!",
 }
 
@@ -196,7 +204,17 @@ local comboPhrases = {
 ---@param addscore integer amount of fuel to add from the trick. Multiplied by 10 for score.
 ---@param name string the name of the trick that will be displayed.
 ---@param dosound integer whether to play a sound for the trick. 0 none, 1 short, 2 BRC trick.
-local function jerComboAdd(m, e, addcombo, addscore, name, dosound)
+---@param dostars boolean whether to spawn star particles when doing the trick.
+local function jerComboAdd(m, e, addcombo, addscore, name, dosound, dostars)
+    local triAnimState = 0
+    if e.combo < 7 then
+        triAnimState = 1
+    elseif e.combo < 19 then
+        triAnimState = 2
+    end
+    if dostars then
+        spawn_triangle_break_particles(7, 139, 0.2, triAnimState) 
+    end
     e.combo = e.combo + addcombo
     if addcombo == 0 and e.combo == 0 then
         e.combo = 1
@@ -209,7 +227,7 @@ local function jerComboAdd(m, e, addcombo, addscore, name, dosound)
     e.trickName = name
     if dosound == 1 then
         audio_stream_play(SOUND_JB_BAP, true, 1)
-        audio_stream_set_frequency(SOUND_JB_BAP, (math.random(8, 12)/10))
+        audio_stream_set_frequency(SOUND_JB_BAP, (math.random(90, 120)/100))
     elseif dosound == 2 then
         audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
     end
@@ -226,9 +244,9 @@ local trickTable = {
     [3] = {name = "Shoot 4 The Sky",anim = "jb_anim_trick_4",   hand = MARIO_HAND_PEACE_SIGN,   start = 5,  fin = 12},
 }
 local trickTableGrind = {
-    [0] = {name = "Cartwheel",      anim = "jb_anim_trick_rail_1", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
-    [1] = {name = "ReversO",        anim = "jb_anim_trick_rail_2", hand = MARIO_HAND_OPEN,      start = 0,  fin = 20},
-    [2] = {name = "Roundhouse",     anim = "jb_anim_trick_rail_3", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
+    [1] = {name = "Cartwheel",      anim = "jb_anim_trick_rail_1", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
+    [2] = {name = "ReversO",        anim = "jb_anim_trick_rail_2", hand = MARIO_HAND_OPEN,      start = 0,  fin = 20},
+    [3] = {name = "Roundhouse",     anim = "jb_anim_trick_rail_3", hand = MARIO_HAND_FISTS,     start = 0,  fin = 20},
 }
 
 local function act_jernado(m)
@@ -390,21 +408,13 @@ local function act_trick(m)
     m.peakHeight = m.pos.y
 
     if m.actionTimer == 1 then
-        play_character_sound(m, CHAR_SOUND_TRICK)
-        --set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        local triAnimState = 0
-        if e.combo < 7 then
-            triAnimState = 1
-        elseif e.combo < 19 then
-            triAnimState = 2
-        end
-        spawn_triangle_break_particles(10, 139, 0.3, triAnimState);
+        play_character_sound(m, CHAR_SOUND_TRICK_1)
         m.marioObj.header.gfx.animInfo.animID = -1
         local name = trickTable[m.actionArg].name
         if m.prevAction & ACT_FLAG_AIR == 0 then
             name = "Pop "..name
         end
-        jerComboAdd(m, e, 1, trickPoints["trick"], name, 1)
+        jerComboAdd(m, e, 1, trickPoints["trick"], name, 1, true)
     end
 
     local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
@@ -440,7 +450,7 @@ local function act_break_down(m)
     if m.actionTimer == 0 then
         e.boostSpeed = m.forwardVel + 10
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        play_character_sound(m, CHAR_SOUND_YAHOO)
+        play_character_sound(m, CHAR_SOUND_TRICK_2)
         m.vel.y = 0
     elseif m.actionTimer == 20 then
         audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
@@ -487,7 +497,7 @@ local function act_break_down(m)
     if e.gfxY > 0x10000 then
         if m.forwardVel > 35 then
             play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
-            jerComboAdd(m, e, 0, trickPoints["breakdown"], "Break it Down", 0)
+            jerComboAdd(m, e, 0, trickPoints["breakdown"], "Break it Down", 0, false)
         end
         e.gfxY = e.gfxY - 0x10000
     end
@@ -501,69 +511,62 @@ hook_mario_action(ACT_BREAK_DOWN, act_break_down)
 local function act_rail_grind(m)
     local e = gJerStates[m.playerIndex]
     local intendedDYaw = convert_s16(m.intendedYaw - m.faceAngle.y)
+    local speed = 45
 
     --center_free_camera()
     --center_rom_hack_camera()
 
     play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
     spawn_mist_particles_variable(1, 0, 5)
-    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
+    set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
     m.marioBodyState.handState = MARIO_HAND_OPEN
 
-    if m.actionState == 0 then 
-        if m.prevAction ~= ACT_RAIL_TRICK then
-            if intendedDYaw > 0 then
-                e.railDir = 1
-            elseif intendedDYaw < 0 then
-                e.railDir = -1
-            end
-            m.faceAngle.y = m.faceAngle.y + (turn90 * e.railDir)
-            set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-            e.boostSpeed = 45
-            m.vel.x = 0
-            m.vel.y = 0
-            m.vel.z = 0
-            if m.actionArg == 0 then
-                play_character_sound(m, CHAR_SOUND_HOOHOO)
-            end
+    if m.actionState == 0 then
+        if intendedDYaw > 0 then
+            e.railDir = 1
+        elseif intendedDYaw < 0 then
+            e.railDir = -1
         end
+        m.faceAngle.y = m.faceAngle.y + (turn90 * e.railDir)
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        e.boostSpeed = speed
+        m.vel.x = 0
+        m.vel.y = 0
+        m.vel.z = 0
+        play_character_sound(m, CHAR_SOUND_HOOHOO)
+        m.actionTimer = 0
         m.actionState = 1
     end
 
-    if e.railTrick ~= 1 then
-        if (m.actionTimer % 5) == 0 then
-            jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes", 0)
+    if m.actionTimer >= 20 or m.actionArg == 0 then
+        if m.actionArg == 2 then
+            if (m.actionTimer % 4) == 0 then
+                jerComboAdd(m, e, 0, trickPoints["grind"], "Reverse Soaps", 0, false)
+            end
+        else
+            if (m.actionTimer % 5) == 0 then
+                jerComboAdd(m, e, 0, trickPoints["grind"], "Soap Shoes", 0, false)
+            end
         end
-    elseif (m.actionTimer % 4) == 0 then
-        jerComboAdd(m, e, 0, trickPoints["grind"], "Reverse Soaps", 0)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 and m.actionTimer > 1 then
         m.pos.y = m.pos.y + 10
-        m.forwardVel = 50
+        m.forwardVel = speed
         return set_mario_action(m, ACT_JUMP, 0)
     end
 
-    if m.controller.buttonPressed & B_BUTTON ~= 0 and m.actionTimer > 1 then
-        return set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
-    --elseif m.controller.buttonDown & L_TRIG ~= 0 then
-        --e.boostSpeed = math.lerp(e.boostSpeed, 80, 0.1)
-        --play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
-        --set_mario_particle_flags(m, PARTICLE_FIRE, 0)
-        --e.fuel = e.fuel - 1
-    else
-        e.boostSpeed = math.lerp(e.boostSpeed, 45, 0.2)
+    if m.input & INPUT_B_PRESSED ~= 0 and ((m.actionTimer > 1 and m.actionArg == 0) or m.actionTimer >= 21) then
+        m.actionArg = math.random(1, #trickTableGrind)
+        play_character_sound(m, CHAR_SOUND_TRICK_1)
+        set_anim_to_frame(m, 0)
+        jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name, 1, true)
+        m.actionTimer = 1
     end
-    if m.actionArg == 1 then
-        if e.railTrick ~= -1 then
-            set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
-            set_anim_to_frame(m, 40)
-            smlua_anim_util_set_animation(m.marioObj, trickTableGrind[e.railTrick].anim)
-        else
-            set_anim_to_frame(m, 20)
-        end
+    if m.actionArg == 0 then
+        smlua_anim_util_set_animation(m.marioObj, "jb_anim_shell_ride_start")
     else
-        e.railTrick = -1
+        smlua_anim_util_set_animation(m.marioObj, trickTableGrind[m.actionArg].anim)
     end
 
     m.forwardVel = e.boostSpeed
@@ -610,78 +613,13 @@ local function act_rail_grind(m)
     end
 
     local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 10)
-    local tilt = math.tan(checkFront/10)*2000
+    local tilt = math.tan(checkFront/10)*6000
     m.marioObj.header.gfx.angle.x = tilt
 
     m.actionTimer = m.actionTimer + 1
     return 0
 end
 hook_mario_action(ACT_RAIL_GRIND, act_rail_grind)
-
-local function act_rail_trick(m)
-    local e = gJerStates[m.playerIndex]
-
-    play_sound(SOUND_MOVING_TERRAIN_SLIDE + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject)
-    set_mario_animation(m, MARIO_ANIM_RUNNING_UNUSED)
-    if m.prevAction == ACT_RAIL_GRIND then
-        spawn_mist_particles_variable(5, 0, 5)
-        m.pos.y = m.floorHeight
-        m.pos.x = m.pos.x + (e.boostSpeed * sins(m.faceAngle.y))
-        m.pos.z = m.pos.z + (e.boostSpeed * coss(m.faceAngle.y))
-    else
-        if m.actionTimer == 0 then
-            e.boostSpeed = m.forwardVel
-        end
-        set_mario_particle_flags(m, PARTICLE_DUST, 0)
-        mario_set_forward_vel(m, e.boostSpeed)
-    end
-
-    if m.actionTimer == 0 then
-        --set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        local triAnimState = 0
-        if e.combo < 7 then
-            triAnimState = 1
-        elseif e.combo < 19 then
-            triAnimState = 2
-        end
-        spawn_triangle_break_particles(10, 139, 0.3, triAnimState);
-        set_anim_to_frame(m, 0)
-        play_character_sound(m, CHAR_SOUND_TRICK)
-        jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name, 1)
-        e.railTrick = m.actionArg
-    end
-
-    smlua_anim_util_set_animation(m.marioObj, trickTableGrind[m.actionArg].anim)
-    if m.marioObj.header.gfx.animInfo.animFrame == 19 then
-        return set_mario_action(m, m.prevAction, 1)
-    end
-
-    local stepResult = perform_ground_step(m)
-    if stepResult == GROUND_STEP_LEFT_GROUND then
-        e.railTrick = -1
-        m.vel.y = 10
-        m.forwardVel = 40
-        return set_mario_action(m, ACT_FREEFALL, 0)
-    elseif stepResult == GROUND_STEP_HIT_WALL then
-        return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
-    end
-
-    local checkA = m.pos.y - find_floor_height_relative_polar(m, turn90, 30)
-    local checkB = m.pos.y - find_floor_height_relative_polar(m, 0 - turn90, 30)
-    local height = 10
-    if (checkA < height and checkB < height) and m.prevAction == ACT_RAIL_GRIND then
-        e.railTrick = -1
-        return set_mario_action(m, ACT_BRAKING, 0)
-    end
-
-    local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 10)
-    local tilt = math.tan(checkFront/10)*2000
-    m.marioObj.header.gfx.angle.x = tilt
-
-    m.actionTimer = m.actionTimer + 1
-    return 0
-end
-hook_mario_action(ACT_RAIL_TRICK, act_rail_trick)
 
 local function act_screw_spin(m)
     local e = gJerStates[m.playerIndex]
@@ -717,6 +655,7 @@ local function act_screw_spin(m)
         o.oWoodenPostOffsetY = o.oWoodenPostOffsetY - e.screwSpeed/2000
     end
     if m.actionArg == 1 and m.actionTimer == 6 then
+        play_character_sound(m, CHAR_SOUND_GIDDY)
         e.screwSpeed = 10000
     end
 
@@ -747,8 +686,8 @@ local function act_screw_spin(m)
         elseif m.input & INPUT_B_PRESSED ~= 0 then
             play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
             set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
-            e.screwSpeed = e.screwSpeed + 3000
-            jerComboAdd(m, e, 0, trickPoints["screw"], "Around The World", 0)
+            e.screwSpeed = e.screwSpeed + 3000 * (m.flags & MARIO_METAL_CAP ~= 0 and 2 or 1)
+            jerComboAdd(m, e, 0, trickPoints["screw"], "Around The World", 0, false)
         else
             e.screwSpeed = math.lerp(e.screwSpeed, 1500, 0.1)
         end
@@ -756,7 +695,7 @@ local function act_screw_spin(m)
         play_sound(SOUND_AIR_HEAVEHO_MOVE, m.marioObj.header.gfx.cameraToObject)
         if (m.actionTimer % 4) == 0 then
             set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
-            jerComboAdd(m, e, 0, trickPoints["screw"], "CYCLONE", 0)
+            jerComboAdd(m, e, 0, trickPoints["screw"], "CYCLONE", 0, false)
         end
     end
 
@@ -765,6 +704,46 @@ local function act_screw_spin(m)
     return 0
 end
 hook_mario_action(ACT_SCREW_SPIN, act_screw_spin)
+
+local function act_spinjump(m)
+    local e = gJerStates[m.playerIndex]
+    m.marioBodyState.handState = MARIO_HAND_OPEN
+
+    if m.actionState == 0 then
+        play_character_sound(m, CHAR_SOUND_SPINJUMP)
+        e.gfxY = 0
+        m.vel.y = 55
+        m.actionState = 1
+    end
+
+    if m.actionTimer <= (m.actionArg == 1 and 21 or 12) then
+        for i=0, m.actionTimer do
+            if m.actionTimer % 3 == 0 then
+                play_sound_with_freq_scale(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject, 1 + (i/12)*1.5)
+            end
+        end
+    elseif m.input & INPUT_Z_PRESSED ~= 0 then
+        return set_mario_action(m, ACT_GROUND_POUND, 0)
+    end
+    if m.actionArg == 1 and m.vel.y > 10 then
+        set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
+    end
+
+    local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, MARIO_ANIM_START_TWIRL, AIR_STEP_CHECK_LEDGE_GRAB)
+    if stepResult == AIR_STEP_HIT_WALL then
+        set_mario_action(m, ACT_AIR_HIT_WALL, 0)
+    elseif stepResult == AIR_STEP_GRABBED_LEDGE then
+        m.marioObj.header.gfx.animInfo.animID = -1
+    end
+
+    e.gfxY = e.gfxY + 0x4000
+    m.vel.y = m.vel.y + 1
+    m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_SPINJUMP, act_spinjump)
 
 local FORCE_STOMP_STATE_INIT = 0
 local FORCE_STOMP_STATE_STALL = 1
@@ -787,6 +766,9 @@ local function bhv_force_stomp_genaric(m, e, o, state)
         m.vel.y = vel * (1 - m.intendedMag/32*0.5)
         m.forwardVel = vel * (m.intendedMag/32)
         m.faceAngle.y = m.intendedYaw
+        if m.actionArg == 1 then
+            play_character_sound(m, CHAR_SOUND_SPINJUMP)
+        end
     end
 end
 
@@ -810,7 +792,19 @@ local function bhv_force_stomp_bully(m, e, o, state)
         m.vel.y = 30
         m.forwardVel = -30
         m.faceAngle.y = m.intendedYaw
-        if m.actionArg == 1 then
+        if e.spinInput ~= 0 then
+            o.oForwardVel = vel * (m.actionArg == 1 and 2.5 or 1.5) * -1
+            m.pos.y = m.pos.y + o.hitboxHeight
+            set_mario_action(m, ACT_SPINJUMP, m.actionArg)
+            if m.actionArg == 1 then
+                m.vel.y = 50
+                jerComboAdd(m, e, 0, 10, "", 0, false)
+                return "SHRIMPNADO!!!"
+            else
+                jerComboAdd(m, e, 0, 5, "", 0, false)
+                return "Glidin' on Justice"
+            end
+        elseif m.actionArg == 1 then
             return "EVICTION NOTICE"
         end
     end
@@ -841,7 +835,7 @@ local forceStompBhvs = {
                 play_sound(gCharacters[CT_TOAD].soundAttacked, {x = o.oPosX, y = o.oPosY, z = o.oPosZ})
             else
                 spawn_non_sync_object(id_bhvExplosion, E_MODEL_EXPLOSION, o.oPosX, o.oPosY, o.oPosZ, function(o)
-                
+
                 end)
                 play_sound(gCharacters[CT_TOAD].soundWaaaooow, {x = o.oPosX, y = o.oPosY, z = o.oPosZ})
                 obj_mark_for_deletion(o)
@@ -909,7 +903,7 @@ local forceStompBhvs = {
             else
                 m.vel.y = 30
                 m.forwardVel = -50
-                return "Nice try Idiot"
+                return "Fumbler Special"
             end
         end
     end,
@@ -930,7 +924,7 @@ local forceStompBhvs = {
             -- Calculate spring off velocity
             o.oAction = 3
             audio_stream_play(SOUND_JB_CROWD, false, 0.7)
-            jerComboAdd(m, e, 0, 300, "Start Your Engines!", 0)
+            jerComboAdd(m, e, 0, 300, "Start Your Engines!", 0, false)
             m.vel.y = 30
             m.forwardVel = -15
             m.faceAngle.y = m.intendedYaw
@@ -989,9 +983,9 @@ local function act_force_stomp(m)
         set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
         local trickName = forceStompFunc(m, e, o, FORCE_STOMP_STATE_BOUNCE)
         if m.actionArg == 1 then
-            jerComboAdd(m, e, 0, trickPoints["forcestomp"] * 2, trickName and string.upper(trickName) or "LIMIT BREAK", 2)
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"] * 2, trickName and string.upper(trickName) or "LIMIT BREAK", 2, false)
         elseif m.actionArg == 0 then
-            jerComboAdd(m, e, 0, trickPoints["forcestomp"], trickName or "Boot Fuel", 2)
+            jerComboAdd(m, e, 0, trickPoints["forcestomp"], trickName or "Boot Fuel", 2, false)
         end
         -- Reset Air Vars
         e.canJernado = true
@@ -1075,16 +1069,8 @@ local function jb_update(m)
         loaded = true
     end
 
-    -- alt jump
-    if m.action == ACT_JUMP and m.actionArg == 73 then
-        smlua_anim_util_set_animation(m.marioObj, "jb_anim_single_jump_big")
-    end
     -- running tilt
     if m.action == ACT_WALKING then
-        if get_global_timer() % stepFrame == 0 and m.forwardVel > 29 and m.pos.y > m.waterLevel then
-            m.particleFlags = m.particleFlags | PARTICLE_DUST
-        end
-
         if m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_RUNNING then
             e.gfxZ = approach_s32(e.gfxZ, m.marioBodyState.torsoAngle.z, 0x200, 0x200)
             m.marioObj.header.gfx.angle.z = e.gfxZ
@@ -1096,7 +1082,6 @@ local function jb_update(m)
         --m.slideVelZ = m.slideVelZ * 3
 
         if m.input & INPUT_Z_DOWN ~= 0 and m.pos.y == m.floorHeight then
-            e.railTrick = -1
             m.action = ACT_SLIDE_KICK_SLIDE
             set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
         end
@@ -1105,13 +1090,18 @@ local function jb_update(m)
         if m.input & INPUT_Z_PRESSED ~= 0 then
             set_mario_action(m, ACT_SLIDE_KICK, 0)
         elseif m.input & INPUT_Z_DOWN ~= 0 then
-            set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 0)
+            set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 1)
         end
     end
     -- break down
     if m.action == ACT_SLIDE_KICK_SLIDE then
-                m.slideVelZ = m.slideVelZ * 1.05
-                m.slideVelX = m.slideVelX * 1.05
+        if m.floor.type ~= SURFACE_CLASS_SLIPPERY and m.floor.type ~= SURFACE_CLASS_VERY_SLIPPERY then
+            m.slideVelZ = m.slideVelZ * 1.05
+            m.slideVelX = m.slideVelX * 1.05
+        else
+            m.slideVelZ = m.slideVelZ * 1.01
+            m.slideVelX = m.slideVelX * 1.01
+        end
         if m.controller.buttonDown & L_TRIG ~= 0 and e.fuel > 0 and m.forwardVel > 0 and capCheck then
             play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
             set_mario_particle_flags(m, PARTICLE_FIRE, 0)
@@ -1121,18 +1111,31 @@ local function jb_update(m)
             end
             e.fuel = e.fuel - 1
             if m.controller.buttonPressed & B_BUTTON ~= 0 and e.fuel > fuelCost then
-                set_mario_action(m, ACT_BREAK_DOWN, 0)
                 e.gfxY = 0
                 e.fuel = e.fuel - fuelCost
+                return set_mario_action(m, ACT_BREAK_DOWN, 0)
             end
-        elseif m.controller.buttonPressed & B_BUTTON ~= 0 and m.forwardVel >= 30 then
-            set_mario_action(m, ACT_RAIL_TRICK, math.random(0, #trickTableGrind))
+        elseif m.controller.buttonPressed & B_BUTTON ~= 0 and m.forwardVel >= 30 and m.actionTimer == 20 then
+            -- integrate slide tricks directly into action
+            local triAnimState = 0
+            if e.combo < 7 then
+                triAnimState = 1
+            elseif e.combo < 19 then
+                triAnimState = 2
+            end
+            m.actionArg = math.random(1, #trickTableGrind)
+            m.actionTimer = 0
+            spawn_triangle_break_particles(5, 139, 0.2, triAnimState);
+            set_anim_to_frame(m, 0)
+            play_character_sound(m, CHAR_SOUND_TRICK_1)
+            jerComboAdd(m, e, 1, trickPoints["trick"], trickTableGrind[m.actionArg].name, 1, true)
         end
 
-        if e.railTrick ~= -1 then
-            smlua_anim_util_set_animation(m.marioObj, trickTableGrind[e.railTrick].anim)
-            set_anim_to_frame(m, 20)
+        if m.actionArg ~= 0 then
+            smlua_anim_util_set_animation(m.marioObj, trickTableGrind[m.actionArg].anim)
         end
+
+        m.actionTimer = math.clamp((m.actionTimer + 1), -1, 20)
     end
     -- firsties
     if m.action == ACT_WALL_KICK_AIR and (m.prevAction == ACT_AIR_HIT_WALL or m.prevAction == ACT_WALL_KICK_AIR) then
@@ -1140,7 +1143,7 @@ local function jb_update(m)
         if m.marioObj.header.gfx.animInfo.animFrame < 10 then
             set_mario_particle_flags(m, PARTICLE_SPARKLES, 0)
             if m.marioObj.header.gfx.animInfo.animFrame == 1 then
-                jerComboAdd(m, e, 1, trickPoints["firstie"], "Firstie", 2)
+                jerComboAdd(m, e, 1, trickPoints["firstie"], "Firstie", 2, false)
             end
         end
     end
@@ -1151,24 +1154,24 @@ local function jb_update(m)
             m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
             m.vel.y = 25
             m.forwardVel = 45
-            jerComboAdd(m, e, 1, trickPoints["sledgekick"], "Sledge-Kick", 2)
+            jerComboAdd(m, e, 1, trickPoints["sledgekick"], "Sledge-Kick", 2, false)
         end
         e.perfectTimer = e.perfectTimer + 1
     end
     -- air dash
-    if (commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight and capCheck then
+    if (commonAirActions[m.action] or m.action == ACT_SPINJUMP or (m.action == ACT_FORCE_STOMP and m.actionTimer > 12)) and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight and capCheck then
         set_mario_action(m, ACT_DASH, 0)
         e.canDash = false
     end
     -- jernado
-    if ((commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
+    if ((commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionTimer > 15)) or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
         if m.action ~= ACT_SIDE_FLIP or m.marioObj.header.gfx.animInfo.animFrame >= 10 then
             set_mario_action(m, ACT_JERNADO, 0)
             e.canJernado = false
         end
     end
     -- boost
-    if (boostActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 and capCheck then
+    if (boostActions[m.action] or m.action == ACT_SPINJUMP or (m.action == ACT_FORCE_STOMP and m.actionTimer > 12)) and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 and capCheck then
         set_mario_action(m, ACT_BOOST, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         set_anim_to_frame(m, 0)
@@ -1194,7 +1197,7 @@ local function jb_update(m)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
     end
     -- tricks
-    if (commonAirActions[m.action] or m.action == ACT_BUTT_SLIDE_AIR or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & B_BUTTON ~= 0 and m.pos.y > (m.floorHeight + 250) then
+    if (commonAirActions[m.action] or m.action == ACT_SPINJUMP or m.action == ACT_BUTT_SLIDE_AIR or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & B_BUTTON ~= 0 and m.pos.y > (m.floorHeight + minTrickHeight) then
         set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
     -- butt slide
@@ -1207,16 +1210,28 @@ local function jb_update(m)
     end
     -- wooden posts
     local nearestWoodPost = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvWoodenPost)
-    if cur_obj_dist_to_nearest_object_with_behavior(get_behavior_from_id(id_bhvWoodenPost)) < 300 and m.action == ACT_TRICK and nearestWoodPost.oWoodenPostOffsetY > -190 then
+    if cur_obj_dist_to_nearest_object_with_behavior(get_behavior_from_id(id_bhvWoodenPost)) < 300 and (m.action == ACT_TRICK or (m.action == ACT_SLIDE_KICK_SLIDE and m.actionArg ~= 0 and m.actionTimer < 11)) and nearestWoodPost.oWoodenPostOffsetY > -190 then
         local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
         m.interactObj = nearestWoodPost
         set_mario_action(m, ACT_SCREW_SPIN, crack and 1 or 0)
     end
     -- master cap
-    if cur_obj_dist_to_nearest_object_with_behavior(get_behavior_from_id(id_bhvMasterCapBox)) < 400 and m.action == ACT_TRICK then
+    if betterCoins and cur_obj_dist_to_nearest_object_with_behavior(get_behavior_from_id(id_bhvMasterCapBox)) < 400 and m.action == ACT_TRICK then
         local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
         m.interactObj = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvMasterCapBox)
         set_mario_action(m, ACT_FORCE_STOMP, crack and 1 or 0)
+    end
+    -- boost boots
+    if m.flags & MARIO_METAL_CAP ~= 0 and (m.action == ACT_BREAK_DOWN or m.action == ACT_BOOST or (m.action == ACT_FORCE_STOMP and m.actionState == FORCE_STOMP_STATE_BOUNCE)) then
+        local foot1 = {x = get_hand_foot_pos_x(m, 2), y = get_hand_foot_pos_y(m, 2), z = get_hand_foot_pos_z(m, 2)}
+        local foot2 = {x = get_hand_foot_pos_x(m, 3), y = get_hand_foot_pos_y(m, 3), z = get_hand_foot_pos_z(m, 3)}
+        local yOffset = 30
+        spawn_non_sync_object(id_bhvCoinSparkles, E_MODEL_RED_FLAME, foot1.x, foot1.y - yOffset, foot1.z, nil)
+        spawn_non_sync_object(id_bhvCoinSparkles, E_MODEL_RED_FLAME, foot2.x, foot2.y - yOffset, foot2.z, nil)
+    end
+    -- after images
+    if (m.forwardVel >= 80 or (m.action == ACT_FORCE_STOMP and m.vel.y > 50)) and m.flags & MARIO_VANISH_CAP == 0 then
+        spawn_after_images(2, 7, 200)
     end
 
 
@@ -1228,8 +1243,7 @@ local function jb_update(m)
         [ACT_SLIDE_KICK_SLIDE]  = true,
         [ACT_BREAK_DOWN]        = true,
         [ACT_RAIL_GRIND]        = true,
-        [ACT_RAIL_TRICK]        = true,
-        [ACT_LEDGE_GRAB]        = true,
+        [ACT_LEDGE_GRAB]        = false,
         [ACT_STOMACH_SLIDE]     = true,
     }
     if e.comboTimer > 0 then
@@ -1285,7 +1299,7 @@ local function jb_set_action(m)
         if m.forwardVel > 45 then
             set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
             m.actionArg = 1
-            jerComboAdd(m, e, 1, trickPoints["speedkick"], "Speed-Kick", 2)
+            jerComboAdd(m, e, 1, trickPoints["speedkick"], "Speed-Kick", 2, false)
         end
     end
     -- jump anim
@@ -1302,11 +1316,16 @@ local function jb_set_action(m)
     if m.action == ACT_SLIDE_KICK_SLIDE and m.prevAction == ACT_SLIDE_KICK then
         e.railTrick = -1
     end
-
     -- rail grind
-    if m.action == ACT_LEDGE_GRAB and m.prevAction ~= ACT_LEDGE_CLIMB_DOWN and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > railGrindRange or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
+    if (m.action == ACT_LEDGE_GRAB or m.action == ACT_LEDGE_CLIMB_DOWN) and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > railGrindRange or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
         return set_mario_action(m, ACT_RAIL_GRIND, 0)
     end
+    -- spinjump
+    if (m.action == ACT_JUMP or m.action == ACT_SIDE_FLIP or m.action == ACT_STEEP_JUMP) and e.spinInput ~= 0 then
+        m.faceAngle.y = m.intendedYaw
+        set_mario_action(m, ACT_SPINJUMP, 0)
+    end
+
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_SET_MARIO_ACTION, jb_set_action)
 
@@ -1325,11 +1344,11 @@ local function jb_before_set_action(m, act)
             return ACT_BRAKING_STOP
         end
     -- Set vanilla attacks to tricks
-    elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and (m.input & INPUT_NONZERO_ANALOG ~= 0 and m.action ~= ACT_LEDGE_GRAB)) then
-        if m.action & ACT_FLAG_AIR == 0 then   
+    elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and (m.pos.y > m.floorHeight and m.action ~= ACT_LEDGE_GRAB)) then
+        if m.action & ACT_FLAG_AIR == 0 then
             local velTrade = math.max(m.forwardVel - 30, 0)*0.75
             m.forwardVel = m.forwardVel - velTrade
-            m.vel.y = 50 + velTrade  
+            m.vel.y = 50 + velTrade
         end
         m.actionTimer = 0
         return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
@@ -1399,7 +1418,7 @@ local function jb_hud()
 
     djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
     djui_hud_set_font(FONT_RECOLOR_HUD)
-    local kph = ""..string.format("%.0f", math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)).." KPH"
+    local kph = ""..string.format("%.0f", math.abs(m.forwardVel)).." KPH" --math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
     djui_hud_print_text(kph, width - 40 - (#kph * 3 * 12), height - 240, 3, 3)
 
     local randomOffsetX = math.round(math.random(0-e.score, e.score)/10000)
@@ -1468,7 +1487,7 @@ end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
 
 local function jb_interact(m, o, int)
-    if m.action == ACT_TRICK and obj_get_force_stomp_func(o) then
+    if (m.action == ACT_TRICK or (m.action == ACT_SLIDE_KICK_SLIDE and m.actionArg ~= 0 and m.actionTimer < 11)) and obj_get_force_stomp_func(o) then
         local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
         m.interactObj = o
         set_mario_action(m, ACT_FORCE_STOMP, crack and 1 or 0)
@@ -1477,3 +1496,13 @@ local function jb_interact(m, o, int)
     if m.action == ACT_FORCE_STOMP then return false end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, jb_interact)
+
+local function jb_hazard(m, type)
+    if m.flags & MARIO_METAL_CAP ~= 0 and type == SURFACE_BURNING then
+        if m.forwardVel ~= 0 then
+            spawn_non_sync_object(id_bhvKoopaShellFlame, E_MODEL_RED_FLAME, m.pos.x, m.floorHeight, m.pos.z, nil)
+        end
+        return false
+    end
+end
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_HAZARD_SURFACE, jb_hazard)
