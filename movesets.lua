@@ -17,7 +17,9 @@ end
 local ANGLE_QUEUE_SIZE = 9
 local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 
-local TEX_JB_IMPACT_FRAME = get_texture_info('jb-impact-frame')
+local TEX_JB_IMPACT_FRAME = get_texture_info('jb_impact_frame')
+local TEX_JB_SPEEDOMETER_JER = get_texture_info('jb_speedometer_jer')
+local TEX_JB_METER_JER = get_texture_info('jb_meter')
 
 local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
 local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
@@ -62,6 +64,7 @@ for i = 0, MAX_PLAYERS - 1 do
         comboOpacity = 0,
         comboPhrase = "",
         comboPhraseScale = 0,
+        needleAngle = 0,
         score = 0,
         trickName = "",
         railDir = 0,
@@ -179,19 +182,19 @@ local comboPhrases = {
     [1]  = "",
     [2]  = "",
     [3]  = "",
-    [4]  = "Alright...",
-    [5]  = "Not Bad...",
-    [6]  = "Subpar...",
+    [4]  = "Subpar.",
+    [5]  = "Mediocre.",
+    [6]  = "Not Bad.",
     [7]  = "Dude, What?",
-    [8]  = "Awesome???",
-    [9]  = "Gormful",
-    [10] = "Gnarly!'",
-    [11] = "Pimpin'",
+    [8]  = "Yeah???",
+    [9]  = "Gormful!",
+    [10] = "Gnarly!",
+    [11] = "Pimpin!",
     [12] = "Tubular!",
     [13] = "Diggin' it!",
-    [14] = "SWEET!!",
-    [15] = "DAYUMN!!!",
-    [16] = "EVILSWAG!!!!",
+    [14] = "SWEET!",
+    [15] = "DAYUMN!",
+    [16] = "EVILSWAG!",
     [17] = "BOMB AS HELL!",
     [18] = "DANCE BABY YEAH!",
     [19] = "ALL CITY!",
@@ -1090,7 +1093,7 @@ local function jb_update(m)
         if m.input & INPUT_Z_PRESSED ~= 0 then
             set_mario_action(m, ACT_SLIDE_KICK, 0)
         elseif m.input & INPUT_Z_DOWN ~= 0 then
-            set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 1)
+            set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 0)
         end
     end
     -- break down
@@ -1263,6 +1266,10 @@ local function jb_update(m)
         end
     end
     e.comboPhraseScale = math.lerp(e.comboPhraseScale, 2, 0.2)
+    e.needleAngle = math.clamp(math.lerp(e.needleAngle, math.abs(m.forwardVel), 0.2), 0, 110)
+    if e.needleAngle > 100 then
+        e.needleAngle = e.needleAngle - 5
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
@@ -1370,7 +1377,7 @@ _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_PHYS_STEP, jb_before
 local function jb_hud()
     local m = gMarioStates[0]
     local e = gJerStates[0]
-    if gNetworkPlayers[0].currActNum == 99 or gMarioStates[0].action == ACT_INTRO_CUTSCENE or obj_get_first_with_behavior_id(id_bhvActSelector) then return end
+    if gNetworkPlayers[0].currActNum == 99 or gMarioStates[0].action == ACT_INTRO_CUTSCENE or obj_get_first_with_behavior_id(id_bhvActSelector) or _G.charSelect.is_menu_open() then return end
 
     djui_hud_set_color(255, 255, 255, 255)
     djui_hud_set_resolution(RESOLUTION_DJUI)
@@ -1380,6 +1387,7 @@ local function jb_hud()
     local halfW = width/2
     local halfH = height/2
     local eCol = network_player_get_override_palette_color(gNetworkPlayers[0], EMBLEM)
+    local widescreenCheck = width/height > 1.5
 
     -- DEBUG HUD
     --djui_hud_print_text(("e.screwSpeed = "..tostring(e.screwSpeed)), 75, 175, 1)
@@ -1393,9 +1401,8 @@ local function jb_hud()
     --djui_hud_print_text(("m.actionArg = "..tostring(m.actionArg)), 75, 375, 1)
     --djui_hud_print_text(("animFrame = "..tostring(m.marioObj.header.gfx.animInfo.animFrame)), 75, 400, 1)
 
-    --if m.wall ~= nil then
-    --djui_hud_print_text(("m.wall.lowerY = "..tostring(m.wall.lowerY)), 75, 175, 1)
-    --djui_hud_print_text(("m.wall.upperY = "..tostring(m.wall.upperY)), 75, 200, 1)
+    --djui_hud_print_text(("width = "..tostring(width)), 75, 175, 1)
+    --djui_hud_print_text(("height = "..tostring(height)), 75, 200, 1)
     --djui_hud_print_text(("m.wall.vertex1.x = "..tostring(m.wall.vertex1.x)), 700, 100, 1)
     --djui_hud_print_text(("m.wall.vertex1.y = "..tostring(m.wall.vertex1.y)), 700, 125, 1)
     --djui_hud_print_text(("m.wall.vertex1.z = "..tostring(m.wall.vertex1.z)), 700, 150, 1)
@@ -1404,25 +1411,62 @@ local function jb_hud()
     --djui_hud_print_text(("m.wall.vertex3.z = "..tostring(m.wall.vertex3.z)), 1000, 150, 1)
     --end
 
-
     if m.flags & MARIO_CAP_ON_HEAD ~= 0 then
-        local yOff = 40
-        local xOff = 20
+        local mult = 0
+        local yDiff = widescreenCheck and 6 or 2
+        local xPos = width - fuelMax*2 - 20
+        local yPos = height - (widescreenCheck and 42 or 31)
+        local xOff = 3
+        local yOff = -2 * xOff
         djui_hud_set_color(0, 0, 0, 255)
-        djui_hud_render_rect(width - xOff - fuelMax*2, height - yOff, fuelMax*2, 30)
-        djui_hud_set_color(eCol.r, eCol.g, eCol.b, 128)
-        djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuel*2 - 8, 30 - 8)
-        djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
-        djui_hud_render_rect(width - xOff - fuelMax*2 + 4, height - yOff + 4, e.fuelLerp*2 - 8, 30 - 8)
+            mult = widescreenCheck and 3 or 2
+            djui_hud_render_rect(xPos - (xOff * mult), yPos - (xOff * mult) - yDiff, fuelMax*2 - (yOff * mult), 16 - (yOff * mult) + 2*yDiff)
+        djui_hud_set_color(255, 255, 255, 255)
     end
 
-    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
-    djui_hud_set_font(FONT_RECOLOR_HUD)
-    local kph = ""..string.format("%.0f", math.abs(m.forwardVel)).." KPH" --math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
-    djui_hud_print_text(kph, width - 40 - (#kph * 3 * 12), height - 240, 3, 3)
+    local speedometerScale = widescreenCheck and 3 or 2
+    djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - speedometerScale * 128, height - speedometerScale * 128, speedometerScale, speedometerScale, 0, 0, 128, 128)
 
-    local randomOffsetX = math.round(math.random(0-e.score, e.score)/10000)
-    local randomOffsetY = math.round(math.random(0-e.score, e.score)/10000)
+    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
+    --djui_hud_render_texture(TEX_JB_KPH_JER, width - 71 * speedometerScale, height - 100 * speedometerScale, speedometerScale, speedometerScale)
+    djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - 71 * speedometerScale, height - speedometerScale * 128, speedometerScale*2, speedometerScale, 192, 0, 64, 128)
+    djui_hud_set_font(FONT_RECOLOR_HUD)
+    local kph = string.format("%.0f", math.abs(m.forwardVel))
+    djui_hud_print_text(kph, width - (33 * speedometerScale) - (#kph * 12 * speedometerScale), height - 99 * speedometerScale, speedometerScale, speedometerScale)
+    djui_hud_print_text("KPH", width - 68 * speedometerScale, height - 82 * speedometerScale, speedometerScale, speedometerScale)
+
+    djui_hud_set_color(255, 255, 255, 255)
+    djui_hud_set_rotation(-0x3450 - (e.needleAngle * 280), 0.625, 0.15625)
+    --djui_hud_render_texture(TEX_JB_NEEDLE_JER, width - 70 * speedometerScale, height - 70 * speedometerScale, speedometerScale, speedometerScale)
+    djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - 70 * speedometerScale, height - 70 * speedometerScale, speedometerScale*4, speedometerScale, 128, 0, 32, 128)
+    djui_hud_set_rotation(0, 0, 0)
+
+    if m.flags & MARIO_CAP_ON_HEAD ~= 0 then
+        local mult = 0
+        local yDiff = widescreenCheck and 6 or 2
+        local xPos = width - fuelMax*2 - 20
+        local yPos = height - (widescreenCheck and 42 or 31)
+        local xOff = 3
+        local yOff = -2 * xOff
+        --djui_hud_set_color(0, 0, 0, 255)
+            --mult = 4
+            --djui_hud_render_rect(xPos - (xOff * mult), yPos - (xOff * mult) - yDiff, fuelMax*2 - (yOff * mult), 16 - (yOff * mult) + 2*yDiff)
+        djui_hud_set_color(255, 255, 255, 255)
+            mult = 1
+            djui_hud_render_rect(xPos - (xOff * mult), yPos - (xOff * mult) - yDiff, fuelMax*2 - (yOff * mult), 16 - (yOff * mult) + 2*yDiff)
+        djui_hud_set_color(0, 0, 0, 255)
+            djui_hud_render_rect(xPos, yPos, fuelMax*2, 16)
+
+        djui_hud_set_color((eCol.r/2)+128, (eCol.g/2)+128, (eCol.b/2)+128, 255)
+            djui_hud_render_rect(xPos, yPos, e.fuel*2, 16)
+        --djui_hud_set_color(eCol.r, eCol.g, eCol.b, 128)
+            --djui_hud_render_texture(TEX_JB_METER_JER, xPos, yPos, e.fuel*2/8, 20/8)
+        djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
+            djui_hud_render_texture(TEX_JB_METER_JER, xPos, yPos, e.fuelLerp/4, 2)
+    end
+
+    local randomOffsetX = not is_game_paused() and math.round(math.random(0-e.score, e.score)/20000) or 0
+    local randomOffsetY = not is_game_paused() and math.round(math.random(0-e.score, e.score)/20000) or 0
 
     if e.comboOpacity > 0 then
         local opacity = ((e.comboOpacity/comboOpacityMax) * 255)
@@ -1458,7 +1502,7 @@ local function jb_hud()
             else
                 comboPhraseUse = comboPhrases[#comboPhrases]
             end
-            djui_hud_print_text(comboPhraseUse, halfW + 210 + randomOffsetX, height - 180 - (e.comboPhraseScale - 2)*32 + randomOffsetY, e.comboPhraseScale)
+            djui_hud_print_text(comboPhraseUse, halfW - (#comboPhraseUse * 12) + 15 - (e.comboPhraseScale - 2)*200 + randomOffsetX, height - 240 - (e.comboPhraseScale - 2)*80 + randomOffsetY, e.comboPhraseScale)
         end
     end
 

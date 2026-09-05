@@ -13,11 +13,12 @@ end
 local E_MODEL_JB_JER = smlua_model_util_get_id('jb_jer_geo')
 
 -- Credits --
+_G.charSelect.credit_add(TEXT_MOD_NAME, "Squishy6094", "Coding")
 _G.charSelect.credit_add(TEXT_MOD_NAME, "JerThePear", "Creator")
 
 -- Textures --
-local TEX_JB_JER = get_texture_info('jb-icon-jer')
-local TEX_ART_JB_JER = get_texture_info('jb-graffiti-jer')
+local TEX_JB_JER = get_texture_info('jb_icon_jer')
+local TEX_ART_JB_JER = get_texture_info('jb_graffiti_jer')
 
 -- Sound --
 local SOUND_MENU_THEME_JB_JER = audio_stream_load('jb_menu_theme.ogg')
