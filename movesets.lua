@@ -25,6 +25,8 @@ local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
 local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
 local SOUND_JB_BAP = audio_stream_load("jb_sound_bap.ogg")
 local SOUND_JB_CROWD = audio_stream_load("jb_sound_crowd.ogg")
+audio_stream_set_volume_channel(SOUND_JB_BAP, MOD_AUDIO_CHANNEL_SFX)
+audio_stream_set_volume_channel(SOUND_JB_CROWD, MOD_AUDIO_CHANNEL_SFX)
 
 local fuelMax = 0
 local fuelMaxInc = 100
@@ -70,6 +72,8 @@ for i = 0, MAX_PLAYERS - 1 do
         railDir = 0,
         railTrick = -1,
         screwSpeed = 0,
+        highscore = mod_storage_load_integer("highscore"),
+        highscoreScale = 0,
         gfxX = 0,
         gfxY = 0,
         gfxZ = 0,
@@ -795,21 +799,21 @@ local function bhv_force_stomp_bully(m, e, o, state)
         m.vel.y = 30
         m.forwardVel = -30
         m.faceAngle.y = m.intendedYaw
-        if e.spinInput ~= 0 then
-            o.oForwardVel = vel * (m.actionArg == 1 and 2.5 or 1.5) * -1
-            m.pos.y = m.pos.y + o.hitboxHeight
-            set_mario_action(m, ACT_SPINJUMP, m.actionArg)
-            if m.actionArg == 1 then
-                m.vel.y = 50
-                jerComboAdd(m, e, 0, 10, "", 0, false)
-                return "SHRIMPNADO!!!"
-            else
-                jerComboAdd(m, e, 0, 5, "", 0, false)
-                return "Glidin' on Justice"
-            end
-        elseif m.actionArg == 1 then
+        --if e.spinInput ~= 0 then
+            --o.oForwardVel = vel * (m.actionArg == 1 and 2.5 or 1.5) * -1
+            --m.pos.y = m.pos.y + o.hitboxHeight
+            --set_mario_action(m, ACT_SPINJUMP, m.actionArg)
+            --if m.actionArg == 1 then
+            --    m.vel.y = 50
+            --    jerComboAdd(m, e, 0, 10, "", 0, false)
+            --    return "SHRIMPNADO!!!"
+            --else
+            --    jerComboAdd(m, e, 0, 5, "", 0, false)
+            --    return "Glidin' on Justice"
+            --end
+        --elseif m.actionArg == 1 then
             return "EVICTION NOTICE"
-        end
+        --end
     end
 end
 
@@ -1261,8 +1265,25 @@ local function jb_update(m)
         if e.comboOpacity > 0 then
             e.comboOpacity = e.comboOpacity - 1
         elseif e.comboOpacity == 0 then
+            if e.highscore < e.score then
+                e.highscore = e.score
+                mod_storage_save_integer("highscore", e.score)
+                e.highscoreScale = -1
+            end
             e.combo = 0
             e.score = 0
+        end
+    end
+    if e.highscoreScale ~= 0 then
+        if e.highscoreScale == -1 then
+            play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
+            e.highscoreScale = 300
+        elseif e.highscoreScale < 1 then
+            e.highscoreScale = 0
+        elseif e.highscoreScale < 256 then
+            e.highscoreScale = math.lerp(e.highscoreScale, 0, 0.2)
+        else
+            e.highscoreScale = e.highscoreScale - 1
         end
     end
     e.comboPhraseScale = math.lerp(e.comboPhraseScale, 2, 0.2)
@@ -1379,6 +1400,8 @@ local function jb_hud()
     local e = gJerStates[0]
     if gNetworkPlayers[0].currActNum == 99 or gMarioStates[0].action == ACT_INTRO_CUTSCENE or obj_get_first_with_behavior_id(id_bhvActSelector) or _G.charSelect.is_menu_open() then return end
 
+    gHudDisplay.flags = gHudDisplay.flags & ~HUD_DISPLAY_FLAGS_CAMERA_AND_POWER
+
     djui_hud_set_color(255, 255, 255, 255)
     djui_hud_set_resolution(RESOLUTION_DJUI)
     djui_hud_set_font(FONT_ALIASED)
@@ -1411,6 +1434,41 @@ local function jb_hud()
     --djui_hud_print_text(("m.wall.vertex3.z = "..tostring(m.wall.vertex3.z)), 1000, 150, 1)
     --end
 
+    local speedometerScale = widescreenCheck and 3 or 2
+        djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - speedometerScale * 128, height - speedometerScale * 128, speedometerScale, speedometerScale, 0, 0, 128, 128)
+
+    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
+        djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - 71 * speedometerScale, height - speedometerScale * 128, speedometerScale*2, speedometerScale, 192, 0, 64, 128)
+        djui_hud_set_font(FONT_RECOLOR_HUD)
+    local kph = string.format("%.0f", math.abs(m.forwardVel))
+        djui_hud_print_text(kph, width - (33 * speedometerScale) - (#kph * 12 * speedometerScale), height - 99 * speedometerScale, speedometerScale, speedometerScale)
+        djui_hud_print_text("KPH", width - 68 * speedometerScale, height - 82 * speedometerScale, speedometerScale, speedometerScale)
+
+    local odoWidth = 60
+    djui_hud_set_color(255, 255, 255, 255)
+        djui_hud_render_rect(
+            width - (50 + (odoWidth/2)) * speedometerScale,
+            height - 35 * speedometerScale,
+            odoWidth * speedometerScale,
+            11 * speedometerScale
+        )
+    djui_hud_set_color(0, 0, 0, 255)
+    djui_hud_set_font(FONT_NORMAL)
+    local odo = string.format("%.0f", e.highscore)
+        djui_hud_print_text(
+            odo,
+            width - ((55 - (odoWidth/2)) * speedometerScale) - (#odo * 14 * speedometerScale/3),
+            height - 35 * speedometerScale,
+            speedometerScale/3,
+            speedometerScale/3
+        )
+
+
+    djui_hud_set_color(255, 255, 255, 255)
+    djui_hud_set_rotation(-0x3450 - (e.needleAngle * 280), 0.625, 0.15625)
+        djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - 70 * speedometerScale, height - 70 * speedometerScale, speedometerScale*4, speedometerScale, 128, 0, 32, 128)
+    djui_hud_set_rotation(0, 0, 0)
+
     if m.flags & MARIO_CAP_ON_HEAD ~= 0 then
         local mult = 0
         local yDiff = widescreenCheck and 6 or 2
@@ -1421,36 +1479,6 @@ local function jb_hud()
         djui_hud_set_color(0, 0, 0, 255)
             mult = widescreenCheck and 3 or 2
             djui_hud_render_rect(xPos - (xOff * mult), yPos - (xOff * mult) - yDiff, fuelMax*2 - (yOff * mult), 16 - (yOff * mult) + 2*yDiff)
-        djui_hud_set_color(255, 255, 255, 255)
-    end
-
-    local speedometerScale = widescreenCheck and 3 or 2
-    djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - speedometerScale * 128, height - speedometerScale * 128, speedometerScale, speedometerScale, 0, 0, 128, 128)
-
-    djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
-    --djui_hud_render_texture(TEX_JB_KPH_JER, width - 71 * speedometerScale, height - 100 * speedometerScale, speedometerScale, speedometerScale)
-    djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - 71 * speedometerScale, height - speedometerScale * 128, speedometerScale*2, speedometerScale, 192, 0, 64, 128)
-    djui_hud_set_font(FONT_RECOLOR_HUD)
-    local kph = string.format("%.0f", math.abs(m.forwardVel))
-    djui_hud_print_text(kph, width - (33 * speedometerScale) - (#kph * 12 * speedometerScale), height - 99 * speedometerScale, speedometerScale, speedometerScale)
-    djui_hud_print_text("KPH", width - 68 * speedometerScale, height - 82 * speedometerScale, speedometerScale, speedometerScale)
-
-    djui_hud_set_color(255, 255, 255, 255)
-    djui_hud_set_rotation(-0x3450 - (e.needleAngle * 280), 0.625, 0.15625)
-    --djui_hud_render_texture(TEX_JB_NEEDLE_JER, width - 70 * speedometerScale, height - 70 * speedometerScale, speedometerScale, speedometerScale)
-    djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - 70 * speedometerScale, height - 70 * speedometerScale, speedometerScale*4, speedometerScale, 128, 0, 32, 128)
-    djui_hud_set_rotation(0, 0, 0)
-
-    if m.flags & MARIO_CAP_ON_HEAD ~= 0 then
-        local mult = 0
-        local yDiff = widescreenCheck and 6 or 2
-        local xPos = width - fuelMax*2 - 20
-        local yPos = height - (widescreenCheck and 42 or 31)
-        local xOff = 3
-        local yOff = -2 * xOff
-        --djui_hud_set_color(0, 0, 0, 255)
-            --mult = 4
-            --djui_hud_render_rect(xPos - (xOff * mult), yPos - (xOff * mult) - yDiff, fuelMax*2 - (yOff * mult), 16 - (yOff * mult) + 2*yDiff)
         djui_hud_set_color(255, 255, 255, 255)
             mult = 1
             djui_hud_render_rect(xPos - (xOff * mult), yPos - (xOff * mult) - yDiff, fuelMax*2 - (yOff * mult), 16 - (yOff * mult) + 2*yDiff)
@@ -1475,17 +1503,17 @@ local function jb_hud()
         local scoreLength = #tostring(e.score)
         djui_hud_set_font(FONT_RECOLOR_HUD)
         djui_hud_set_color(0, 0, 0, opacity)
-        djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, 400, 10)
+            djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, 400, 10)
         djui_hud_set_color(255, 255, 255, opacity)
-        djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, (e.comboTimer/comboTimerMax)*400, 10)
-        djui_hud_print_text(e.trickName, halfW - nameLength*12 + randomOffsetX, height - 90 + randomOffsetY, 2)
+            djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, (e.comboTimer/comboTimerMax)*400, 10)
+            djui_hud_print_text(e.trickName, halfW - nameLength*12 + randomOffsetX, height - 90 + randomOffsetY, 2)
 
         local comboLimit = math.clamp(e.combo, 0, 20)
         local comboCol = math.clamp((comboLimit)*12.75, 0, 255)
 
         --djui_hud_set_font(FONT_HUD)
         djui_hud_set_color(eCol.r, eCol.g, eCol.b, opacity)
-        djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25 + randomOffsetX, height - 185 + randomOffsetY, 4)
+            djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25 + randomOffsetX, height - 185 + randomOffsetY, 4)
         --djui_hud_set_font(FONT_RECOLOR_HUD)
         if e.combo >= 100 then
             djui_hud_set_color(255, 0, 0, opacity)
@@ -1506,6 +1534,14 @@ local function jb_hud()
         end
     end
 
+    if e.highscoreScale > 0 then
+        local HSalpha = e.highscoreScale <= 255 and e.highscoreScale or 255
+        local HSfactor = e.highscoreScale <= 255 and HSalpha/255 or (math.sin(e.highscoreScale*0.5)*0.2 + 1)
+        djui_hud_set_color(255, 255, 255, HSalpha)
+        djui_hud_set_font(FONT_HUD)
+        djui_hud_print_text("NEW HIGHSCORE!", halfW - 240, height - 200 - 48*HSfactor, 3, 3*HSfactor)
+    end
+
     local posOut = gVec3fZero()
 
     if (m.action == ACT_FORCE_STOMP or m.action == ACT_SCREW_SPIN) and m.actionArg == 1 then
@@ -1520,7 +1556,7 @@ local function jb_hud()
             set_shader_flag_enabled(SHADER_FLAG_EXPOSURE, true)
             set_shader_flag_enabled(SHADER_FLAG_CONTRAST, true)
             djui_hud_set_color(eCol.r, eCol.g, eCol.b, 255)
-            djui_hud_render_texture(TEX_JB_IMPACT_FRAME, posOut.x - 384, posOut.y - 384, 1.5, 1.5)
+                djui_hud_render_texture(TEX_JB_IMPACT_FRAME, posOut.x - 384, posOut.y - 384, 1.5, 1.5)
         else
             set_shader_flag_enabled(SHADER_FLAG_SATURATION, false)
             set_shader_flag_enabled(SHADER_FLAG_EXPOSURE, false)
