@@ -49,6 +49,21 @@ local function better_coins_compat()
 end
 hook_event(HOOK_ON_MODS_LOADED, better_coins_compat)
 
+local function pause_check()
+    local m = gMarioStates[0]
+
+    if m.action == ACT_START_SLEEPING or m.action == ACT_SLEEPING or m.actionTimer < 80 and
+        (m.action == ACT_STAR_DANCE_EXIT or m.action == ACT_STAR_DANCE_NO_EXIT or m.action == ACT_STAR_DANCE_WATER) then
+        return 0.2
+    end
+
+    if is_game_paused() or _G.charSelect.is_menu_open() then
+        return 0
+    end
+
+    return 1
+end
+
 local gJerStates = {}
 for i = 0, MAX_PLAYERS - 1 do
     gJerStates[i] = {
@@ -232,11 +247,11 @@ local function jerComboAdd(m, e, addcombo, addscore, name, dosound, dostars)
     e.fuel = e.fuel + (addscore * e.combo)
     e.score = e.score + (addscore * e.combo)*10
     e.trickName = name
-    if dosound == 1 then
-        audio_stream_play(SOUND_JB_BAP, true, 1)
+    if dosound == 1 and m.playerIndex == 0 then
+        audio_stream_play(SOUND_JB_BAP, true, pause_check())
         audio_stream_set_frequency(SOUND_JB_BAP, (math.random(90, 120)/100))
     elseif dosound == 2 then
-        audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
+        audio_sample_play(SOUND_JB_TRICK, m.pos, pause_check())
     end
 end
 
@@ -460,7 +475,7 @@ local function act_break_down(m)
         play_character_sound(m, CHAR_SOUND_TRICK_2)
         m.vel.y = 0
     elseif m.actionTimer == 20 then
-        audio_sample_play(SOUND_JB_TRICK, m.pos, 1)
+        audio_sample_play(SOUND_JB_TRICK, m.pos, pause_check())
     end
     if frame < 30 then
         if frame == 5 or frame == 10 then
@@ -537,6 +552,7 @@ local function act_rail_grind(m)
         m.faceAngle.y = m.faceAngle.y + (turn90 * e.railDir)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         e.boostSpeed = speed
+        e.gfxY = m.faceAngle.y
         m.vel.x = 0
         m.vel.y = 0
         m.vel.z = 0
@@ -619,9 +635,11 @@ local function act_rail_grind(m)
         return set_mario_action(m, ACT_BRAKING, 0)
     end
 
-    local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 10)
-    local tilt = math.tan(checkFront/10)*6000
+    local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 2)
+    local tilt = math.tan(checkFront/2)*6000
+    e.gfxY = m.faceAngle.y - math.lerp(convert_s16(m.faceAngle.y - e.gfxY), 0, 0.5)
     m.marioObj.header.gfx.angle.x = tilt
+    m.marioObj.header.gfx.angle.y = e.gfxY
 
     m.actionTimer = m.actionTimer + 1
     return 0
@@ -646,10 +664,10 @@ local function act_screw_spin(m)
         m.vel.y = 0
         m.vel.z = 0
         m.actionState = 1
-        if m.actionArg == 1 then
+        if m.actionArg == 1 and m.playerIndex == 0 then
             audio_stream_stop(SOUND_JB_BAP)
             audio_sample_stop(SOUND_JB_TRICK)
-            audio_sample_play(SOUND_JB_PARRY, m.pos, 1)
+            audio_sample_play(SOUND_JB_PARRY, m.pos, pause_check())
         end
     end
 
@@ -930,7 +948,7 @@ local forceStompBhvs = {
         elseif state == FORCE_STOMP_STATE_BOUNCE then
             -- Calculate spring off velocity
             o.oAction = 3
-            audio_stream_play(SOUND_JB_CROWD, false, 0.7)
+            audio_stream_play(SOUND_JB_CROWD, false, pause_check()*0.7)
             jerComboAdd(m, e, 0, 300, "Start Your Engines!", 0, false)
             m.vel.y = 30
             m.forwardVel = -15
@@ -977,10 +995,10 @@ local function act_force_stomp(m)
     if not o then return end
     if m.actionState == 0 then
         set_anim_to_frame(m, 0)
-        if m.actionArg == 1 then
+        if m.actionArg == 1 and m.playerIndex == 0 then
             audio_stream_stop(SOUND_JB_BAP)
             audio_sample_stop(SOUND_JB_TRICK)
-            audio_sample_play(SOUND_JB_PARRY, m.pos, 1)
+            audio_sample_play(SOUND_JB_PARRY, m.pos, pause_check())
         end
         forceStompFunc(m, e, o, FORCE_STOMP_STATE_INIT)
         m.actionState = 1
@@ -1276,7 +1294,9 @@ local function jb_update(m)
     end
     if e.highscoreScale ~= 0 then
         if e.highscoreScale == -1 then
-            play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
+            if m.playerIndex == 0 then
+                play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
+            end
             e.highscoreScale = 300
         elseif e.highscoreScale < 1 then
             e.highscoreScale = 0

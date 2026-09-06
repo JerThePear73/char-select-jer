@@ -3,7 +3,12 @@ local afterImageStartOpacity = 0
 local E_MODEL_JB_JER_AFTER_IMAGE = smlua_model_util_get_id('jb_jer_after_image_geo')
 
 function after_image_init(o)
-	local m = gMarioStates[0]
+	local index = network_local_index_from_global(o.globalPlayerIndex) or -1
+  	if index == -1 then
+  		obj_mark_for_deletion(o)
+  		return
+  	end
+  	local m = gMarioStates[index]
 	o.oFlags = OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE
 	o.oOpacity = 0
 
@@ -31,6 +36,8 @@ local id_bhvAfterImage = hook_behavior(nil, OBJ_LIST_UNIMPORTANT, false, after_i
 
 function spawn_after_images(frame, durr, opacity)
 	local m = gMarioStates[0]
+	if m.marioObj.header.gfx.node.flags & GRAPH_RENDER_ACTIVE == 0 or is_player_active(m) == 0 then return end
+
 	if get_global_timer() % frame == 0 then
 		spawn_non_sync_object(
 			id_bhvAfterImage,
@@ -41,6 +48,7 @@ function spawn_after_images(frame, durr, opacity)
 			function(o)
 				afterImageDurr = durr
 				afterImageStartOpacity = opacity
+				o.globalPlayerIndex = network_global_index_from_local(m.playerIndex)
 			end
 		)
 	end
