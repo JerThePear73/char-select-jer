@@ -7,8 +7,9 @@ local ACT_TRICK = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_
 local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_ATTACKING)
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
-local ACT_SCREW_SPIN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
+local ACT_SCREW_SPIN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING) -- | ACT_FLAG_INTANGIBLE)
 local ACT_SPINJUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
+local ACT_POLE_GRIND = allocate_mario_action(ACT_GROUP_AUTOMATIC | ACT_FLAG_ON_POLE)-- | ACT_FLAG_INTANGIBLE)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -194,6 +195,7 @@ local trickPoints = {
     ["grind"]       = 1,
     ["forcestomp"]  = 10,
     ["screw"]       = 1,
+    ["pole"]        = 5,
 }
 
 local comboPhrases = {
@@ -205,7 +207,7 @@ local comboPhrases = {
     [5]  = "Mediocre.",
     [6]  = "Not Bad.",
     [7]  = "Dude, What?",
-    [8]  = "Yeah???",
+    [8]  = "Check it!",
     [9]  = "Gormful!",
     [10] = "Gnarly!",
     [11] = "Pimpin!",
@@ -770,6 +772,77 @@ local function act_spinjump(m)
 end
 hook_mario_action(ACT_SPINJUMP, act_spinjump)
 
+local function act_pole_grind(m)
+    local e = gJerStates[m.playerIndex]
+    local o = m.usedObj
+    local poleTop = o.oPosY + o.hitboxHeight
+    set_mario_animation(m, MARIO_ANIM_START_RIDING_SHELL)
+    set_mario_particle_flags(m, PARTICLE_DUST, 0)
+
+    if m.actionState == 0 then
+        set_anim_to_frame(m, 0)
+        play_character_sound(m, CHAR_SOUND_HAHA)
+        m.forwardVel = 0
+        m.vel.x = 0
+        m.vel.z = 0
+        e.canJernado = true
+        e.canDash = true
+        e.canBoost = true
+        if m.actionArg == 1 then
+            e.fuel = e.fuel - fuelCost
+            jerComboAdd(m, e, 1, trickPoints["pole"], "Whirlybird", 2, false)
+            set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
+        end
+        m.actionState = 1
+    end
+
+    if m.actionTimer <= 1 then
+        e.gfxY = 0x10000 * (2 * m.actionArg)
+    end
+
+    if m.actionTimer < 15 and m.actionArg == 1 then
+        set_mario_particle_flags(m, PARTICLE_FIRE, 0)
+    elseif m.actionTimer % (m.actionArg == 1 and 3 or 5) == 0 then
+        jerComboAdd(m, e, 0, trickPoints["grind"], m.actionArg == 0 and "VTEC Power" or "Just One Wing", 0, false)
+    end
+
+    if m.pos.y > poleTop then -- reached top
+        if m.input & INPUT_Z_DOWN ~= 0 or m.actionArg == 0 then
+            m.marioObj.oMarioPolePos = poleTop
+            return set_mario_action(m, ACT_TOP_OF_POLE_TRANSITION, 0)
+        else
+            return set_mario_action(m, ACT_BACKFLIP, 0)
+        end
+    elseif m.vel.y < 0 then -- hit roof
+        m.pos.y = m.pos.y - 10
+        return set_mario_action(m, ACT_JUMP, 0)
+    elseif m.input & INPUT_A_PRESSED ~= 0 then -- ended early
+        m.pos.x = m.pos.x + (-100 * sins(m.faceAngle.y))
+        m.pos.z = m.pos.z + (-100 * coss(m.faceAngle.y))
+        m.forwardVel = -30
+        set_mario_action(m, ACT_BACKWARD_ROLLOUT, 0)
+    else
+        m.pos.x = o.oPosX
+        m.pos.z = o.oPosZ
+        m.vel.y = 25 + (15 * m.actionArg)
+        play_sound(SOUND_MOVING_TERRAIN_SLIDE, m.marioObj.header.gfx.cameraToObject)
+    end
+
+    perform_air_step(m, 0)
+
+    e.gfxY = math.lerp(e.gfxY, 0, 0.1)
+    m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
+    m.marioObj.header.gfx.angle.x = -turn90
+
+    m.marioObj.header.gfx.pos.x = m.pos.x
+    m.marioObj.header.gfx.pos.y = m.pos.y
+    m.marioObj.header.gfx.pos.z = m.pos.z
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_POLE_GRIND, act_pole_grind)
+
 local FORCE_STOMP_STATE_INIT = 0
 local FORCE_STOMP_STATE_STALL = 1
 local FORCE_STOMP_STATE_BOUNCE = 2
@@ -1042,37 +1115,46 @@ hook_mario_action(ACT_FORCE_STOMP, act_force_stomp)
 -- UPDATES --
 -------------
 
-local commonAirActions = {
-    [ACT_JUMP] = true,
-    [ACT_FREEFALL] = true,
-    [ACT_WALL_KICK_AIR] = true,
-    [ACT_SIDE_FLIP] = true,
-    [ACT_BACKFLIP] = true,
-    [ACT_FORWARD_ROLLOUT] = true,
-    [ACT_TWIRLING] = true,
-    [ACT_TOP_OF_POLE_JUMP] = true,
-    [ACT_JERNADO] = true,
-    [ACT_DASH] = true,
-}
-local boostActions = {
-    [ACT_JUMP] = true,
-    [ACT_FREEFALL] = true,
-    [ACT_WALL_KICK_AIR] = true,
-    [ACT_SIDE_FLIP] = true,
-    [ACT_BACKFLIP] = true,
-    [ACT_FORWARD_ROLLOUT] = true,
-    [ACT_TWIRLING] = true,
-    [ACT_TOP_OF_POLE_JUMP] = true,
-    [ACT_JERNADO] = true,
-    [ACT_DASH] = true,
-    [ACT_WALKING] = true,
-    [ACT_IDLE] = true,
-    [ACT_GROUND_POUND] = true,
+local comboPreserveActions = {
+    [ACT_BUTT_SLIDE]            = true,
+    [ACT_DIVE_SLIDE]            = true,
+    [ACT_SLIDE_KICK]            = true,
+    [ACT_SLIDE_KICK_SLIDE]      = true,
+    [ACT_BREAK_DOWN]            = true,
+    [ACT_RAIL_GRIND]            = true,
+    [ACT_LEDGE_GRAB]            = false,
+    [ACT_STOMACH_SLIDE]         = true,
+    [ACT_READING_SIGN]          = true,
+    [ACT_READING_NPC_DIALOG]    = true,
+    [ACT_STAR_DANCE_NO_EXIT]    = true,
+    [ACT_STAR_DANCE_EXIT]       = true,
+    [ACT_PULLING_DOOR]          = true,
+    [ACT_PUSHING_DOOR]          = true,
+    [ACT_WARP_DOOR_SPAWN]       = true,
 }
 
 local function jb_update(m)
     local e = gJerStates[m.playerIndex]
     local capCheck = m.flags & MARIO_CAP_ON_HEAD ~= 0
+    local actionChecks = {
+        [ACT_JUMP]              = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_FREEFALL]          = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_WALL_KICK_AIR]     = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_SIDE_FLIP]         = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_BACKFLIP]          = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_FORWARD_ROLLOUT]   = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_BACKWARD_ROLLOUT]  = {dash = (m.vel.y < -10),      boost = true,                   jernado = true,                 trick = true                },
+        [ACT_TWIRLING]          = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_TOP_OF_POLE_JUMP]  = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_JERNADO]           = {dash = true,                 boost = true,                   jernado = false,                trick = true                },
+        [ACT_DASH]              = {dash = false,                boost = true,                   jernado = true,                 trick = true                },
+        [ACT_WALKING]           = {dash = false,                boost = true,                   jernado = false,                trick = false               },
+        [ACT_IDLE]              = {dash = false,                boost = true,                   jernado = false,                trick = false               },
+        [ACT_GROUND_POUND]      = {dash = false,                boost = false,                  jernado = true,                 trick = false               },
+        [ACT_SPINJUMP]          = {dash = true,                 boost = true,                   jernado = false,                trick = true                },
+        [ACT_BUTT_SLIDE_AIR]    = {dash = false,                boost = false,                  jernado = false,                trick = true                },
+        [ACT_FORCE_STOMP]       = {dash = (m.actionTimer > 12), boost = (m.actionTimer > 12),   jernado = (m.actionTimer > 12), trick = (m.actionTimer > 12)},
+    }
 
     e.fuel = math.clamp(e.fuel, 0, fuelMax)
     e.fuelLerp = math.lerp(e.fuelLerp, e.fuel, 0.2)
@@ -1184,19 +1266,19 @@ local function jb_update(m)
         e.perfectTimer = e.perfectTimer + 1
     end
     -- air dash
-    if (commonAirActions[m.action] or m.action == ACT_SPINJUMP or (m.action == ACT_FORCE_STOMP and m.actionTimer > 12)) and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and e.canDash and m.pos.y > m.floorHeight and capCheck then
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].dash) and e.canDash and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and m.pos.y > m.floorHeight and capCheck then
         set_mario_action(m, ACT_DASH, 0)
         e.canDash = false
     end
     -- jernado
-    if ((commonAirActions[m.action] or (m.action == ACT_FORCE_STOMP and m.actionTimer > 15)) or m.action == ACT_GROUND_POUND) and e.spinInput ~= 0 and e.canJernado and m.pos.y > m.floorHeight then
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].jernado) and e.canJernado and e.spinInput ~= 0 and m.pos.y > m.floorHeight then
         if m.action ~= ACT_SIDE_FLIP or m.marioObj.header.gfx.animInfo.animFrame >= 10 then
             set_mario_action(m, ACT_JERNADO, 0)
             e.canJernado = false
         end
     end
     -- boost
-    if (boostActions[m.action] or m.action == ACT_SPINJUMP or (m.action == ACT_FORCE_STOMP and m.actionTimer > 12)) and m.controller.buttonPressed & L_TRIG ~= 0 and e.canBoost and e.fuel > 0 and capCheck then
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].boost) and e.canBoost and m.controller.buttonPressed & L_TRIG ~= 0 and e.fuel > 0 and capCheck then
         set_mario_action(m, ACT_BOOST, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         set_anim_to_frame(m, 0)
@@ -1222,7 +1304,7 @@ local function jb_update(m)
         m.marioObj.header.gfx.angle.z = m.marioObj.header.gfx.angle.z + e.gfxZ
     end
     -- tricks
-    if (commonAirActions[m.action] or m.action == ACT_SPINJUMP or m.action == ACT_BUTT_SLIDE_AIR or (m.action == ACT_FORCE_STOMP and m.actionState == 2)) and m.controller.buttonPressed & B_BUTTON ~= 0 and m.pos.y > (m.floorHeight + minTrickHeight) then
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].trick) and m.controller.buttonPressed & B_BUTTON ~= 0 and m.pos.y > (m.floorHeight + minTrickHeight) then
         set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
     -- butt slide
@@ -1261,16 +1343,6 @@ local function jb_update(m)
 
 
     -- hud calcs
-    local comboPreserveActions = {
-        [ACT_BUTT_SLIDE]        = true,
-        [ACT_DIVE_SLIDE]        = true,
-        [ACT_SLIDE_KICK]        = true,
-        [ACT_SLIDE_KICK_SLIDE]  = true,
-        [ACT_BREAK_DOWN]        = true,
-        [ACT_RAIL_GRIND]        = true,
-        [ACT_LEDGE_GRAB]        = false,
-        [ACT_STOMACH_SLIDE]     = true,
-    }
     if e.comboTimer > 0 then
         e.comboOpacity = comboOpacityMax
         if m.pos.y == m.floorHeight and not comboPreserveActions[m.action] then
@@ -1294,7 +1366,7 @@ local function jb_update(m)
     end
     if e.highscoreScale ~= 0 then
         if e.highscoreScale == -1 then
-            if m.playerIndex == 0 then
+            if m.playerIndex == 0 then --and m.action ~= ACT_EXIT_LAND_SAVE_DIALOG then
                 play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
             end
             e.highscoreScale = 300
@@ -1316,6 +1388,7 @@ _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
 local function jb_set_action(m)
     local e = gJerStates[m.playerIndex]
+    local capCheck = m.flags & MARIO_CAP_ON_HEAD ~= 0
 
     e.perfectTimer = 0
     e.gfxX = 0
@@ -1373,7 +1446,10 @@ local function jb_set_action(m)
         m.faceAngle.y = m.intendedYaw
         set_mario_action(m, ACT_SPINJUMP, 0)
     end
-
+    -- pole grind
+    if m.action == ACT_GRAB_POLE_FAST then
+        return set_mario_action(m, ACT_POLE_GRIND, ((m.controller.buttonDown & L_TRIG ~= 0 and e.fuel >= fuelCost and capCheck) and 1 or 0))
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_SET_MARIO_ACTION, jb_set_action)
 
@@ -1414,6 +1490,27 @@ local function jb_before_phys_step(m)
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_BEFORE_PHYS_STEP, jb_before_phys_step)
+
+local function jb_interact(m, o, int)
+    if (m.action == ACT_TRICK or (m.action == ACT_SLIDE_KICK_SLIDE and m.actionArg ~= 0 and m.actionTimer < 11)) and obj_get_force_stomp_func(o) then
+        local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
+        m.interactObj = o
+        set_mario_action(m, ACT_FORCE_STOMP, crack and 1 or 0)
+        return false
+    end
+    if m.action == ACT_FORCE_STOMP then return false end
+end
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, jb_interact)
+
+local function jb_hazard(m, type)
+    if m.flags & MARIO_METAL_CAP ~= 0 and type == SURFACE_BURNING then
+        if m.forwardVel ~= 0 then
+            spawn_non_sync_object(id_bhvKoopaShellFlame, E_MODEL_RED_FLAME, m.pos.x, m.floorHeight, m.pos.z, nil)
+        end
+        return false
+    end
+end
+_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_HAZARD_SURFACE, jb_hazard)
 
 local function jb_hud()
     local m = gMarioStates[0]
@@ -1585,24 +1682,3 @@ local function jb_hud()
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
-
-local function jb_interact(m, o, int)
-    if (m.action == ACT_TRICK or (m.action == ACT_SLIDE_KICK_SLIDE and m.actionArg ~= 0 and m.actionTimer < 11)) and obj_get_force_stomp_func(o) then
-        local crack = m.prevAction == ACT_BREAK_DOWN and m.forwardVel > 35
-        m.interactObj = o
-        set_mario_action(m, ACT_FORCE_STOMP, crack and 1 or 0)
-        return false
-    end
-    if m.action == ACT_FORCE_STOMP then return false end
-end
-_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_INTERACT, jb_interact)
-
-local function jb_hazard(m, type)
-    if m.flags & MARIO_METAL_CAP ~= 0 and type == SURFACE_BURNING then
-        if m.forwardVel ~= 0 then
-            spawn_non_sync_object(id_bhvKoopaShellFlame, E_MODEL_RED_FLAME, m.pos.x, m.floorHeight, m.pos.z, nil)
-        end
-        return false
-    end
-end
-_G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ALLOW_HAZARD_SURFACE, jb_hazard)

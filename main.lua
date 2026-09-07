@@ -246,6 +246,7 @@ local HANDTABLE_JB_JER = {
     [MARIO_ANIM_BACKFLIP]           = MARIO_HAND_OPEN,
     [MARIO_ANIM_SLIDE_KICK]         = 5,
     [MARIO_ANIM_SINGLE_JUMP]        = function(m, frame) if frame > 8 then return MARIO_HAND_OPEN end end,
+    [MARIO_ANIM_HANDSTAND_JUMP]     = function(m, frame) if frame > 8 then return MARIO_HAND_OPEN end end,
 }
 
 --local HEALTH_METER_JB_JER = {
