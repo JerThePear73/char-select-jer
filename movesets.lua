@@ -942,6 +942,25 @@ local forceStompBhvs = {
             return "Friendly Fire"
         end
     end,
+    [id_bhvBreakableBoxSmall] = function(m, e, o, state)
+        if state == FORCE_STOMP_STATE_INIT then
+            o.oForwardVel = 0
+        elseif state == FORCE_STOMP_STATE_STALL then
+            m.pos.x = o.oPosX - sins(m.faceAngle.y)*o.hitboxRadius*0.5
+            m.pos.y = o.oPosY + o.hitboxHeight*0.75
+            m.pos.z = o.oPosZ - coss(m.faceAngle.y)*o.hitboxRadius*0.5
+            m.marioObj.header.gfx.angle.x = -0x2000
+        elseif state == FORCE_STOMP_STATE_BOUNCE then
+            -- Calculate spring off velocity
+            local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
+            o.oMoveAngleYaw = m.intendedYaw + 0x8000
+            o.oForwardVel = vel * (m.actionArg == 1 and 2 or 1) * -1
+
+            m.vel.y = 30
+            m.forwardVel = -30
+            m.faceAngle.y = m.intendedYaw
+        end
+    end,
     [id_bhvJumpingBox] = function(m, e, o, state)
         if state == FORCE_STOMP_STATE_INIT then
             o.oVelY = 50
@@ -1045,9 +1064,10 @@ local forceStompInteracts = {
 ---@return function?
 -- Gets extra logic ran 
 local function obj_get_force_stomp_func(o)
-    --if not o then return end
-    if forceStompBhvs[get_id_from_behavior(o.behavior)] then
-        return forceStompBhvs[get_id_from_behavior(o.behavior)]
+    for bhv, func in pairs(forceStompBhvs) do
+        if obj_has_behavior_id(o, bhv) ~= 0 then
+            return func
+        end
     end
     for int, func in pairs(forceStompInteracts) do
         if o.oInteractType & int ~= 0 then
