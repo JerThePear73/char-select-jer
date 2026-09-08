@@ -88,7 +88,7 @@ for i = 0, MAX_PLAYERS - 1 do
         railDir = 0,
         railTrick = -1,
         screwSpeed = 0,
-        highscore = mod_storage_load_integer("highscore"),
+        highscore = mod_storage_load_number("highscore"),
         highscoreScale = 0,
         gfxX = 0,
         gfxY = 0,
@@ -491,7 +491,7 @@ local function act_break_down(m)
         set_mario_particle_flags(m, PARTICLE_DUST, 0)
     end
 
-    mario_set_forward_vel(m, e.boostSpeed)
+    mario_set_forward_vel(m, math.clamp(e.boostSpeed, 15, metalCheck and 130 or 110))
     local stepResult = perform_ground_step(m)
     if stepResult == GROUND_STEP_HIT_WALL then
         m.particleFlags = m.particleFlags | PARTICLE_VERTICAL_STAR
@@ -501,7 +501,7 @@ local function act_break_down(m)
         m.vel.y = 5
     end
 
-    e.boostSpeed = math.clamp((e.boostSpeed - 0.2 + (e.prevPosY - m.pos.y)/(metalCheck and 5 or 10)), 15, metalCheck and 150 or 110)
+    e.boostSpeed = (e.boostSpeed - 0.2 + (e.prevPosY - m.pos.y)/(metalCheck and 5 or 10))
     if e.boostSpeed == 15 then
         set_mario_action(m, ACT_BUTT_SLIDE_STOP, 0)
     end
@@ -516,7 +516,7 @@ local function act_break_down(m)
     end
 
     if m.actionTimer > 29 then
-        e.gfxY = e.gfxY + math.round(e.boostSpeed * 0x55)
+        e.gfxY = e.gfxY + math.round(m.forwardVel * 0x55)
     end
     if e.gfxY > 0x10000 then
         if m.forwardVel > 35 then
@@ -1131,6 +1131,7 @@ local comboPreserveActions = {
     [ACT_PULLING_DOOR]          = true,
     [ACT_PUSHING_DOOR]          = true,
     [ACT_WARP_DOOR_SPAWN]       = true,
+    [ACT_DISAPPEARED]           = true,
 }
 
 local function jb_update(m)
@@ -1338,7 +1339,7 @@ local function jb_update(m)
     end
     -- after images
     if (m.forwardVel >= 80 or (m.action == ACT_FORCE_STOMP and m.vel.y > 50)) and m.flags & MARIO_VANISH_CAP == 0 then
-        spawn_after_images(2, 7, 200)
+        spawn_after_images(m, 2, 7, 200)
     end
 
 
@@ -1355,9 +1356,9 @@ local function jb_update(m)
         if e.comboOpacity > 0 then
             e.comboOpacity = e.comboOpacity - 1
         elseif e.comboOpacity == 0 then
-            if e.highscore < e.score then
+            if e.score > e.highscore then
                 e.highscore = e.score
-                mod_storage_save_integer("highscore", e.score)
+                mod_storage_save_number("highscore", e.highscore) -- idk why this doesn't work
                 e.highscoreScale = -1
             end
             e.combo = 0
@@ -1366,7 +1367,7 @@ local function jb_update(m)
     end
     if e.highscoreScale ~= 0 then
         if e.highscoreScale == -1 then
-            if m.playerIndex == 0 then --and m.action ~= ACT_EXIT_LAND_SAVE_DIALOG then
+            if m.playerIndex == 0 and not charSelect.is_menu_open() then --and m.action ~= ACT_EXIT_LAND_SAVE_DIALOG then
                 play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
             end
             e.highscoreScale = 300

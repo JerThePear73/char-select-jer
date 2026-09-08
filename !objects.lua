@@ -34,8 +34,7 @@ end
 
 local id_bhvAfterImage = hook_behavior(nil, OBJ_LIST_UNIMPORTANT, false, after_image_init, after_image_loop, "id_bhvAfterImage")
 
-function spawn_after_images(frame, durr, opacity)
-	local m = gMarioStates[0]
+function spawn_after_images(m, frame, durr, opacity)
 	if m.marioObj.header.gfx.node.flags & GRAPH_RENDER_ACTIVE == 0 or is_player_active(m) == 0 then return end
 
 	if get_global_timer() % frame == 0 then
