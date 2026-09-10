@@ -207,7 +207,7 @@ local comboPhrases = {
     [5]  = "Mediocre.",
     [6]  = "Not Bad.",
     [7]  = "Dude, What?",
-    [8]  = "Check it!",
+    [8]  = "Darkwoke!",
     [9]  = "Gormful!",
     [10] = "Gnarly!",
     [11] = "Pimpin!",
@@ -1020,7 +1020,11 @@ local forceStompBhvs = {
             else
                 m.vel.y = 30
                 m.forwardVel = -50
-                return "Fumbler Special"
+                if m.actionArg == 0 then
+                    return "Fumbler Special"
+                elseif m.actionArg == 1 then
+                    return "BIG MISSER"
+                end
             end
         end
     end,
