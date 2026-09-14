@@ -952,9 +952,15 @@ local forceStompBhvs = {
             m.marioObj.header.gfx.angle.x = -0x2000
         elseif state == FORCE_STOMP_STATE_BOUNCE then
             -- Calculate spring off velocity
-            local vel = math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
+            local vel = -math.sqrt(m.vel.x^2 + m.vel.y^2 + m.vel.z^2)
             o.oMoveAngleYaw = m.intendedYaw + 0x8000
-            o.oForwardVel = vel * (m.actionArg == 1 and 2 or 1) * -1
+            if m.actionArg == 1 then
+                o.oForwardVel = vel * 2
+                return "30 Minutes or It's Free"
+            else
+                o.oForwardVel = vel
+                return "Pizza Delivery"
+            end
 
             m.vel.y = 30
             m.forwardVel = -30
