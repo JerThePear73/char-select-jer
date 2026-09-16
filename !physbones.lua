@@ -6,11 +6,20 @@ local function init_physbone_memory()
     setmetatable(physBoneMem, {
         __call = function(t, o, i)
             t[o] = t[o] or {}
-            t[o][i] = t[o][i] or { prevPos = gVec3fZero(), prevYaw = 0, prevPitch = 0, yaw = 0, pitch = 0 }
+            t[o][i] = t[o][i] or {
+                prevPos = gVec3fZero(),
+                prevRootYaw = 0,
+                prevRootPitch = 0,
+                yaw = 0,
+                pitch = 0,
+                yawVel = 0,
+                pitchVel = 0,
+            }
             return t[o][i]
         end
     })
 end
+
 local function clean_physbone_memory(o)
     physBoneMem[o] = nil
 end
