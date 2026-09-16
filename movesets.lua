@@ -431,14 +431,15 @@ local function act_trick(m)
 
     m.peakHeight = m.pos.y
 
-    if m.actionTimer == 1 then
+    if m.actionState == 0 then
         play_character_sound(m, CHAR_SOUND_TRICK_1)
         m.marioObj.header.gfx.animInfo.animID = -1
         local name = trickTable[m.actionArg].name
         if m.prevAction & ACT_FLAG_AIR == 0 then
-            name = "Pop "..name
+            name = (m.vel.y ~= 30 and "Pop " or "Short Pop ")..name
         end
         jerComboAdd(m, e, 1, trickPoints["trick"], name, 1, true)
+        m.actionState = 1
     end
 
     local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
@@ -1641,27 +1642,31 @@ local function jb_hud()
             djui_hud_render_texture(TEX_JB_METER_JER, xPos, yPos, e.fuelLerp/4, 2)
     end
 
+    -- Combo HUD
+
     local randomOffsetX = not is_game_paused() and math.round(math.random(0-e.score, e.score)/20000) or 0
     local randomOffsetY = not is_game_paused() and math.round(math.random(0-e.score, e.score)/20000) or 0
 
     if e.comboOpacity > 0 then
         local opacity = ((e.comboOpacity/comboOpacityMax) * 255)
         --local opacity = 255
-        local nameLength = #e.trickName
-        local scoreLength = #tostring(e.score)
-        djui_hud_set_font(FONT_RECOLOR_HUD)
+        djui_hud_set_font(FONT_CHARACTERISTIC)
         djui_hud_set_color(0, 0, 0, opacity)
             djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, 400, 10)
         djui_hud_set_color(255, 255, 255, opacity)
             djui_hud_render_rect(halfW - 200 + randomOffsetX, height - 110 + randomOffsetY, (e.comboTimer/comboTimerMax)*400, 10)
-            djui_hud_print_text(e.trickName, halfW - nameLength*12 + randomOffsetX, height - 90 + randomOffsetY, 2)
+            e.trickName = string.upper(e.trickName)
+        local tW, tH = djui_hud_measure_text(e.trickName)
+            djui_hud_print_text(e.trickName, halfW - tW + randomOffsetX, height - 90 + randomOffsetY, 2)
 
         local comboLimit = math.clamp(e.combo, 0, 20)
         local comboCol = math.clamp((comboLimit)*12.75, 0, 255)
 
         --djui_hud_set_font(FONT_HUD)
         djui_hud_set_color(eCol.r, eCol.g, eCol.b, opacity)
-            djui_hud_print_text(""..tostring(e.score), halfW - (scoreLength)*25 + randomOffsetX, height - 185 + randomOffsetY, 4)
+        local scoreString = tostring(e.score)
+        local tW, tH = djui_hud_measure_text(scoreString)
+            djui_hud_print_text(scoreString, halfW - tW*2 + randomOffsetX, height - 185 + randomOffsetY, 4)
         --djui_hud_set_font(FONT_RECOLOR_HUD)
         if e.combo >= 100 then
             djui_hud_set_color(255, 0, 0, opacity)
@@ -1678,7 +1683,9 @@ local function jb_hud()
             else
                 comboPhraseUse = comboPhrases[#comboPhrases]
             end
-            djui_hud_print_text(comboPhraseUse, halfW - (#comboPhraseUse * 12) + 15 - (e.comboPhraseScale - 2)*200 + randomOffsetX, height - 240 - (e.comboPhraseScale - 2)*80 + randomOffsetY, e.comboPhraseScale)
+            comboPhraseUse = string.upper(comboPhraseUse)
+            local tW, tH = djui_hud_measure_text(comboPhraseUse)
+            djui_hud_print_text(comboPhraseUse, halfW - tW*e.comboPhraseScale*0.5 - (e.comboPhraseScale - 2)*200 + randomOffsetX, height - 240 - (e.comboPhraseScale - 2)*80 + randomOffsetY, e.comboPhraseScale, e.comboPhraseScale)
         end
     end
 
@@ -1686,8 +1693,9 @@ local function jb_hud()
         local HSalpha = e.highscoreScale <= 255 and e.highscoreScale or 255
         local HSfactor = e.highscoreScale <= 255 and HSalpha/255 or (math.sin(e.highscoreScale*0.5)*0.2 + 1)
         djui_hud_set_color(255, 255, 255, HSalpha)
-        djui_hud_set_font(FONT_HUD)
-        djui_hud_print_text("NEW HIGHSCORE!", halfW - 240, height - 200 - 48*HSfactor, 3, 3*HSfactor)
+        djui_hud_set_font(FONT_CHARACTERISTIC)
+        local tW, tH = djui_hud_measure_text("NEW HIGHSCORE!")
+        djui_hud_print_text("NEW HIGHSCORE!", halfW - tW*1.5, height - 200 - 48*HSfactor, 3, 3*HSfactor)
     end
 
     local posOut = gVec3fZero()
