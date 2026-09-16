@@ -34,11 +34,6 @@ if not _G.physBoneInit then
     _G.physBoneInit = true
 end
 
-local function clean_physbone_memory(o)
-    physBoneMem[o] = nil
-end
-hook_event(HOOK_ON_OBJECT_UNLOAD, clean_physbone_memory)
-
 -- initialize a physbone entry for a character model. fields left `nil` will use their default value.
 ---@param modelId ModelExtendedId|integer
 ---@param index integer
