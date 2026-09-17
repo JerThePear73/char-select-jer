@@ -11,8 +11,8 @@ end
 
 -- Models --
 local E_MODEL_JB_JER = smlua_model_util_get_id('jb_jer_geo')
-init_physbone_chain(E_MODEL_JB_JER, 0, nil, 1, 30, 30)
-init_physbone_chain(E_MODEL_JB_JER, 1, nil, 1, 30, 30)
+init_physbone_chain(E_MODEL_JB_JER, 0, 0.2, 1, 90, 90)
+init_physbone_chain(E_MODEL_JB_JER, 1, 0.2, 1, 90, 90)
 
 -- Credits --
 _G.charSelect.credit_add(TEXT_MOD_NAME, "Squishy6094", "Coding")

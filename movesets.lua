@@ -436,7 +436,7 @@ local function act_trick(m)
         m.marioObj.header.gfx.animInfo.animID = -1
         local name = trickTable[m.actionArg].name
         if m.prevAction & ACT_FLAG_AIR == 0 then
-            name = (m.vel.y ~= 30 and "Pop " or "Short Pop ")..name
+            name = (m.vel.y ~= 30 and "Pop " or "Short ")..name
         end
         jerComboAdd(m, e, 1, trickPoints["trick"], name, 1, true)
         m.actionState = 1
@@ -627,6 +627,9 @@ local function act_rail_grind(m)
         m.forwardVel = 40
         return set_mario_action(m, ACT_FREEFALL, 0)
     elseif stepResult == GROUND_STEP_HIT_WALL then
+        m.faceAngle.y = m.faceAngle.y + 0x1000
+        m.forwardVel = -5
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
     end
 
@@ -957,10 +960,10 @@ local forceStompBhvs = {
             o.oMoveAngleYaw = m.intendedYaw + 0x8000
             if m.actionArg == 1 then
                 o.oForwardVel = vel * 2
-                return "30 Minutes or It's Free"
+                return "SAME DAY SHIPPING"
             else
                 o.oForwardVel = vel
-                return "Pizza Delivery"
+                return "Special Delivery"
             end
 
             m.vel.y = 30
