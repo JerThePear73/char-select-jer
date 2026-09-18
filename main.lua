@@ -15,8 +15,9 @@ init_physbone_chain(E_MODEL_JB_JER, 0, 0.2, 1, 90, 90)
 init_physbone_chain(E_MODEL_JB_JER, 1, 0.2, 1, 90, 90)
 
 -- Credits --
-_G.charSelect.credit_add(TEXT_MOD_NAME, "Squishy6094", "Coding")
 _G.charSelect.credit_add(TEXT_MOD_NAME, "JerThePear", "Creator")
+_G.charSelect.credit_add(TEXT_MOD_NAME, "Squishy6094", "Coding")
+_G.charSelect.credit_add(TEXT_MOD_NAME, "Wibblus", "Physbones")
 
 -- Textures --
 local TEX_JB_JER = get_texture_info('jb_icon_jer')
@@ -194,11 +195,6 @@ local PALETTES_JB_JER = {
 
 local ANIMTABLE_JB_JER = {
 --    [_G.charSelect.CS_ANIM_MENU] = "jb_anim_menu", -- wip
---    [CHAR_ANIM_RUNNING] = "jb_anim_running", -- wip
---    [CHAR_ANIM_RIDING_SHELL] = "jb_anim_shell_ride", -- wip
---    [CHAR_ANIM_START_RIDING_SHELL] = "jb_anim_shell_start", -- wip
---    [CHAR_ANIM_JUMP_RIDING_SHELL] = "jb_anim_shell_fall", -- wip
---    [CHAR_ANIM_SINGLE_JUMP] = "jb_anim_single_jump", -- wip
     [MARIO_ANIM_SLIDEFLIP]              = "jb_anim_slideflip",
     [MARIO_ANIM_SLIDEJUMP]              = "jb_anim_wallkick",
     [MARIO_ANIM_WALKING]                = "jb_anim_nephew_stride",

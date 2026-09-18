@@ -88,7 +88,7 @@ for i = 0, MAX_PLAYERS - 1 do
         railDir = 0,
         railTrick = -1,
         screwSpeed = 0,
-        highscore = mod_storage_load_number("highscore"),
+        highscore = mod_storage_load_integer("highscore"),
         highscoreScale = 0,
         gfxX = 0,
         gfxY = 0,
@@ -705,6 +705,11 @@ local function act_screw_spin(m)
         elseif m.actionArg == 0 then
             m.faceAngle.y = e.gfxY
             set_mario_action(m, ACT_BACKFLIP, 0)
+        end
+        if (o.parentObj ~= o) then
+            play_puzzle_jingle();
+            o.parentObj.oChainChompReleaseStatus = CHAIN_CHOMP_RELEASED_TRIGGER_CUTSCENE;
+            o.parentObj = o;
         end
     end
 
@@ -1375,49 +1380,6 @@ local function jb_update(m)
     if (m.forwardVel >= 80 or (m.action == ACT_FORCE_STOMP and m.vel.y > 50)) and m.flags & MARIO_VANISH_CAP == 0 then
         spawn_after_images(m, 2, 7, 200)
     end
-
-
-    -- hud calcs
-    if e.comboTimer > 0 then
-        e.comboOpacity = comboOpacityMax
-        if m.pos.y == m.floorHeight and not comboPreserveActions[m.action] then
-            e.comboTimer = e.comboTimer - 1
-        end
-        if m.action == ACT_WATER_PLUNGE or m.action == ACT_WATER_IDLE then
-            e.comboTimer = 0
-        end
-    else
-        if e.comboOpacity > 0 then
-            e.comboOpacity = e.comboOpacity - 1
-        elseif e.comboOpacity == 0 then
-            if e.score > e.highscore then
-                e.highscore = e.score
-                mod_storage_save_number("highscore", e.highscore) -- idk why this doesn't work
-                e.highscoreScale = -1
-            end
-            e.combo = 0
-            e.score = 0
-        end
-    end
-    if e.highscoreScale ~= 0 then
-        if e.highscoreScale == -1 then
-            if m.playerIndex == 0 and not charSelect.is_menu_open() then --and m.action ~= ACT_EXIT_LAND_SAVE_DIALOG then
-                play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
-            end
-            e.highscoreScale = 300
-        elseif e.highscoreScale < 1 then
-            e.highscoreScale = 0
-        elseif e.highscoreScale < 256 then
-            e.highscoreScale = math.lerp(e.highscoreScale, 0, 0.2)
-        else
-            e.highscoreScale = e.highscoreScale - 1
-        end
-    end
-    e.comboPhraseScale = math.lerp(e.comboPhraseScale, 2, 0.2)
-    e.needleAngle = math.clamp(math.lerp(e.needleAngle, math.abs(m.forwardVel), 0.2), 0, 110)
-    if e.needleAngle > 100 then
-        e.needleAngle = e.needleAngle - 5
-    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
@@ -1722,5 +1684,56 @@ local function jb_hud()
             set_shader_flag_enabled(SHADER_FLAG_CONTRAST, false)
         end
     end
+
+    -- hud calcs
+    if e.comboTimer > 0 then
+        e.comboOpacity = comboOpacityMax
+        if m.pos.y == m.floorHeight and not comboPreserveActions[m.action] and not is_game_paused() then
+            e.comboTimer = e.comboTimer - 1
+        end
+        if m.action == ACT_WATER_PLUNGE or m.action == ACT_WATER_IDLE then
+            e.comboTimer = 0
+        end
+    else
+        if e.comboOpacity > 0 then
+            e.comboOpacity = e.comboOpacity - 1
+        elseif e.comboOpacity == 0 then
+            if e.score > e.highscore then
+                e.highscore = e.score
+                e.highscoreScale = -1
+            end
+            e.combo = 0
+            e.score = 0
+        end
+    end
+    if e.highscoreScale ~= 0 then
+        if e.highscoreScale == -1 then
+            if m.playerIndex == 0 and not charSelect.is_menu_open() then --and m.action ~= ACT_EXIT_LAND_SAVE_DIALOG then
+                play_music(1, SEQ_EVENT_HIGH_SCORE, 5)
+            end
+            e.highscoreScale = 300
+        elseif e.highscoreScale < 1 then
+            e.highscoreScale = 0
+        elseif e.highscoreScale < 256 then
+            e.highscoreScale = math.lerp(e.highscoreScale, 0, 0.2)
+        else
+            e.highscoreScale = e.highscoreScale - 1
+        end
+    end
+    e.comboPhraseScale = math.lerp(e.comboPhraseScale, 2, 0.2)
+    e.needleAngle = math.clamp(math.lerp(e.needleAngle, math.abs(m.forwardVel), 0.2), 0, 110)
+    if e.needleAngle > 100 then
+        e.needleAngle = e.needleAngle - 5
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_HUD_RENDER_BEHIND, jb_hud)
+
+local function save_highscore()
+    local m = gMarioStates[0]
+    local e = gJerStates[0]
+
+    if e.highscoreScale == 300 then
+        return mod_storage_save_integer("highscore", e.highscore)
+    end
+end
+hook_event(HOOK_UPDATE, save_highscore)
