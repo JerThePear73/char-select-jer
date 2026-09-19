@@ -10,6 +10,8 @@ local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR 
 local ACT_SCREW_SPIN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING) -- | ACT_FLAG_INTANGIBLE)
 local ACT_SPINJUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_POLE_GRIND = allocate_mario_action(ACT_GROUP_AUTOMATIC | ACT_FLAG_ON_POLE)-- | ACT_FLAG_INTANGIBLE)
+local ACT_EVILSWAG_SHELL_RIDE = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_RIDING_SHELL)
+local ACT_EVILSWAG_SHELL_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_CONTROL_JUMP_HEIGHT | ACT_FLAG_RIDING_SHELL)
 
 local function convert_s16(a)
     return (a + 0x8000) % 0x10000 - 0x8000
@@ -77,6 +79,8 @@ for i = 0, MAX_PLAYERS - 1 do
         fuelLerp = 0,
         boostSpeed = 0,
         prevPosY = 0,
+        prevAngle = 0,
+        prevVel = 0,
         combo = 0,
         comboTimer = 0,
         comboOpacity = 0,
@@ -88,6 +92,9 @@ for i = 0, MAX_PLAYERS - 1 do
         railDir = 0,
         railTrick = -1,
         screwSpeed = 0,
+        shellAngle = 0,
+        driftTimer = 0,
+        shellBoost = 0,
         highscore = mod_storage_load_integer("highscore"),
         highscoreScale = 0,
         gfxX = 0,
@@ -196,6 +203,7 @@ local trickPoints = {
     ["forcestomp"]  = 10,
     ["screw"]       = 1,
     ["pole"]        = 5,
+    ["ollie"]       = 5,
 }
 
 local comboPhrases = {
@@ -852,6 +860,161 @@ local function act_pole_grind(m)
 end
 hook_mario_action(ACT_POLE_GRIND, act_pole_grind)
 
+local function act_evilswag_shell_ride(m)
+    local e = gJerStates[m.playerIndex]
+    local angleDiff = math.abs(math.s16(m.intendedYaw - e.shellAngle))
+    local turnRate = (m.controller.buttonDown & L_TRIG ~= 0) and 0x200 or 0x800
+    local driftThreshold = 30
+
+    --center_free_camera()
+    --center_rom_hack_camera()
+
+    update_shell_speed(m)
+    set_mario_animation(m, MARIO_ANIM_RIDING_SHELL)
+    if m.actionState == 0 then
+        e.shellAngle = m.faceAngle.y
+        e.gfxY = m.faceAngle.y
+        e.driftTimer = 0
+        e.shellBoost = 0
+        m.actionState = 1
+    end
+
+    if m.input & INPUT_A_PRESSED ~= 0 then
+        if e.driftTimer >= driftThreshold then
+            m.vel.y = 60
+            m.forwardVel = m.forwardVel + 5
+            m.faceAngle.y = e.gfxY
+            return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 1)
+        else
+            m.vel.y = 40
+            m.faceAngle.y = e.gfxY
+            return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 0)
+        end
+    end
+
+    if m.input & INPUT_Z_PRESSED ~= 0 then
+        mario_stop_riding_object(m)
+        m.faceAngle.y = e.gfxY
+        if m.forwardVel < 24 then
+            mario_set_forward_vel(m, 24)
+        end
+        return set_mario_action(m, ACT_SLIDE_KICK_SLIDE, 0)
+    end
+
+    if angleDiff > 6000 and m.forwardVel >= 30 then
+        e.driftTimer = e.driftTimer + 1
+        if e.driftTimer < driftThreshold then
+            spawn_mist_particles_variable(3, 0, 8)
+        else
+            set_mario_particle_flags(m, PARTICLE_TRIANGLE, 0)
+        end
+    elseif e.driftTimer > 0 then
+        if e.driftTimer >= driftThreshold then
+            play_character_sound(m, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
+            jerComboAdd(m, e, 1, trickPoints["trick"], "Mini-turbo", 1, false)
+            set_anim_to_frame(m, 0)
+            e.shellBoost = 35
+        end
+        e.driftTimer = 0
+    end
+    if e.shellBoost > 0 then
+        e.shellBoost = e.shellBoost - 1
+        set_mario_particle_flags(m, PARTICLE_FIRE, 0)
+    end
+    mario_set_forward_vel(m, math.clamp(m.forwardVel, -64, 64) + e.shellBoost)
+
+    local stepResult = perform_ground_step(m)
+    if stepResult == GROUND_STEP_LEFT_GROUND then
+        m.vel.y = 0
+        m.faceAngle.y = e.gfxY
+        return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 0);
+    elseif stepResult == GROUND_STEP_HIT_WALL then
+        mario_stop_riding_object(m);
+        play_sound((m.flags & MARIO_METAL_CAP ~= 0 and SOUND_ACTION_METAL_BONK or SOUND_ACTION_BONK), m.marioObj.header.gfx.cameraToObject);
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
+    end
+
+    if (m.floor.type == SURFACE_BURNING) then
+        play_sound(SOUND_MOVING_RIDING_SHELL_LAVA, m.marioObj.header.gfx.cameraToObject);
+    else
+        play_sound(SOUND_MOVING_TERRAIN_RIDING_SHELL + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject);
+    end
+
+    e.gfxY = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - e.gfxY), 0, turnRate, turnRate)
+    e.shellAngle = e.gfxY - approach_s32(math.s16(e.gfxY - e.shellAngle), 0, turnRate*0.5, turnRate*0.5)
+
+    m.marioObj.header.gfx.angle.y = e.gfxY
+    m.faceAngle.y = e.shellAngle
+
+    --tilt_body_ground_shell(m, startYaw)
+    m.marioObj.header.gfx.angle.z = math.clamp(math.s16(e.gfxY - e.shellAngle), -0x1000, 0x1000)
+    m.marioObj.header.gfx.pos.y =  m.pos.y + 42
+
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_EVILSWAG_SHELL_RIDE, act_evilswag_shell_ride)
+
+local function act_evilswag_shell_jump(m)
+    local e = gJerStates[m.playerIndex]
+    local o = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvKoopaShell)
+
+    set_mario_animation(m, MARIO_ANIM_JUMP_RIDING_SHELL);
+    update_air_without_turn(m);
+
+    if m.actionState == 0 then
+        if m.actionArg == 1 then
+            e.gfxY = -0x25000
+            jerComboAdd(m, e, 1, trickPoints["ollie"], "Ollie King", 2, false)
+        end
+        play_mario_sound(m, SOUND_ACTION_TERRAIN_JUMP, 0);
+        m.actionState = 1
+    end
+
+    local stepResult = perform_air_step(m, 0)
+    if stepResult == AIR_STEP_LANDED then
+        set_mario_action(m, ACT_RIDING_SHELL_GROUND, 0)
+    elseif stepResult == AIR_STEP_HIT_WALL then
+        local wallAngle = m.wall ~= nil and (atan2s(m.wall.normal.z, m.wall.normal.x) + 0x8000) or 0
+        e.prevAngle = m.wall ~= nil and math.s16(wallAngle - m.faceAngle.y) or 0
+        e.prevVel = m.forwardVel
+        m.forwardVel = -15
+        m.vel.y = 5
+        m.actionState = 2
+        m.actionTimer = 0
+        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+        play_character_sound(m, CHAR_SOUND_UH)
+        play_sound(SOUND_ACTION_BONK, m.marioObj.header.gfx.cameraToObject)
+        m.faceAngle.y = wallAngle
+    elseif stepResult == AIR_STEP_HIT_LAVA_WALL then
+        return lava_boost_on_wall(m)
+    end
+
+    if m.actionState == 2 and m.actionTimer <= 5 then
+        if m.input & INPUT_A_PRESSED ~= 0 then
+            m.faceAngle.y = m.faceAngle.y + 0x8000 + e.prevAngle
+            m.vel.y = 40
+            if m.actionTimer == 0 then
+                e.gfxY = 0x25000
+                jerComboAdd(m, e, 1, trickPoints["firstie"], "Early Turt", 2, false)
+            end
+            m.forwardVel = m.actionTimer == 0 and e.prevVel or 40
+            set_anim_to_frame(m, 0)
+            play_character_sound(m, CHAR_SOUND_YAH_WAH_HOO)
+        end
+    end
+
+    e.gfxY = math.lerp(e.gfxY, 0, 0.2)
+    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+
+    m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
+    m.marioObj.header.gfx.pos.y =  m.pos.y + 42
+    m.actionTimer = m.actionTimer + 1
+    return 0
+end
+hook_mario_action(ACT_EVILSWAG_SHELL_JUMP, act_evilswag_shell_jump)
+
 local FORCE_STOMP_STATE_INIT = 0
 local FORCE_STOMP_STATE_STALL = 1
 local FORCE_STOMP_STATE_BOUNCE = 2
@@ -1171,6 +1334,7 @@ local comboPreserveActions = {
     [ACT_PUSHING_DOOR]          = true,
     [ACT_WARP_DOOR_SPAWN]       = true,
     [ACT_DISAPPEARED]           = true,
+    [ACT_EVILSWAG_SHELL_RIDE]   = true,
 }
 
 local function jb_update(m)
@@ -1380,6 +1544,11 @@ local function jb_update(m)
     if (m.forwardVel >= 80 or (m.action == ACT_FORCE_STOMP and m.vel.y > 50)) and m.flags & MARIO_VANISH_CAP == 0 then
         spawn_after_images(m, 2, 7, 200)
     end
+
+    -- debug shell
+    --if m.controller.buttonPressed & D_JPAD ~= 0 then
+    --    spawn_non_sync_object(id_bhvKoopaShell, E_MODEL_KOOPA_SHELL, m.pos.x, m.pos.y, m.pos.z, nil)
+    --end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
@@ -1446,6 +1615,12 @@ local function jb_set_action(m)
     -- pole grind
     if m.action == ACT_GRAB_POLE_FAST then
         return set_mario_action(m, ACT_POLE_GRIND, ((m.controller.buttonDown & L_TRIG ~= 0 and e.fuel >= fuelCost and capCheck) and 1 or 0))
+    end
+    -- shell stuff
+    if m.action == ACT_RIDING_SHELL_JUMP then
+        return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 0)
+    elseif m.action == ACT_RIDING_SHELL_GROUND then
+        return set_mario_action(m, ACT_EVILSWAG_SHELL_RIDE, 0)
     end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_ON_SET_MARIO_ACTION, jb_set_action)

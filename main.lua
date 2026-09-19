@@ -25,6 +25,22 @@ local TEX_ART_JB_JER = get_texture_info('jb_graffiti_jer')
 
 -- Sound --
 local SOUND_MENU_THEME_JB_JER = audio_stream_load('jb_menu_theme.ogg')
+local SOUND_METAL_CAP_JB_JER = audio_stream_load("jb_music_metal.ogg")
+local SOUND_VANISH_CAP_JB_JER = audio_stream_load("jb_music_vanish.ogg")
+local SOUND_WING_CAP_JB_JER = audio_stream_load("jb_music_wing.ogg")
+local SOUND_SHELL_JB_JER = audio_stream_load("jb_music_shell.ogg")
+local BITRATE = 22050
+
+local jerCapThemes = {
+    [0] = {stream = SOUND_METAL_CAP_JB_JER,     start = BITRATE * 1.684, finish = BITRATE * 48.021},
+    [1] = {stream = SOUND_VANISH_CAP_JB_JER,    start = BITRATE * 1.684, finish = BITRATE * 48.021},
+    [2] = {stream = SOUND_SHELL_JB_JER,         start = BITRATE * 1.684, finish = BITRATE * 48.021},
+    [3] = {stream = SOUND_WING_CAP_JB_JER,      start = BITRATE * 1.840, finish = BITRATE * 52.752},
+}
+for i = 0, #jerCapThemes - 1 do
+    audio_stream_set_loop_points(jerCapThemes[i].stream, jerCapThemes[i].start, jerCapThemes[i].finish)
+    audio_stream_set_looping(jerCapThemes[i].stream, true)
+end
 
 CHAR_SOUND_TRICK_1  = CHAR_SOUND_MAX + 1
 CHAR_SOUND_TRICK_2  = CHAR_SOUND_MAX + 2
@@ -245,6 +261,9 @@ local HANDTABLE_JB_JER = {
     [MARIO_ANIM_SLIDE_KICK]         = 5,
     [MARIO_ANIM_SINGLE_JUMP]        = function(m, frame) if frame > 8 then return MARIO_HAND_OPEN end end,
     [MARIO_ANIM_HANDSTAND_JUMP]     = function(m, frame) if frame > 8 then return MARIO_HAND_OPEN end end,
+    [MARIO_ANIM_START_RIDING_SHELL] = MARIO_HAND_OPEN,
+    [MARIO_ANIM_RIDING_SHELL]       = MARIO_HAND_OPEN,
+    [MARIO_ANIM_JUMP_RIDING_SHELL]  = MARIO_HAND_OPEN,
 }
 
 --local HEALTH_METER_JB_JER = {
@@ -310,3 +329,17 @@ end
 hook_event(HOOK_ON_MODS_LOADED, on_character_select_load)
 hook_event(HOOK_CHARACTER_SOUND, on_character_sound)
 hook_event(HOOK_MARIO_UPDATE, on_character_snore)
+
+local function jer_vanish_or_shell()
+    local m = gMarioStates[0]
+    if m.flags & MARIO_VANISH_CAP ~= 0 then
+        return SOUND_VANISH_CAP_JB_JER
+    end
+    if m.flags & MARIO_WING_CAP ~= 0 then
+        return SOUND_WING_CAP_JB_JER
+    end
+    return SOUND_SHELL_JB_JER
+end
+
+charSelect.character_add_sequence_replacement(CT_JB_JER, SEQ_EVENT_METAL_CAP, SOUND_METAL_CAP_JB_JER)
+charSelect.character_add_sequence_replacement(CT_JB_JER, SEQ_EVENT_POWERUP, jer_vanish_or_shell)
