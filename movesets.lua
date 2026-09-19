@@ -23,6 +23,7 @@ local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 local TEX_JB_IMPACT_FRAME = get_texture_info('jb_impact_frame')
 local TEX_JB_SPEEDOMETER_JER = get_texture_info('jb_speedometer_jer')
 local TEX_JB_METER_JER = get_texture_info('jb_meter')
+local TEX_JB_SHELL = get_texture_info('jb_shell')
 
 local SOUND_JB_TRICK = audio_sample_load("jb_sound_trick.ogg")
 local SOUND_JB_PARRY = audio_sample_load("jb_sound_parry.ogg")
@@ -42,6 +43,7 @@ local turn90 = degrees_to_sm64(90)
 local loaded = false
 local betterCoins = false
 local id_bhvMasterCapBox = get_id_from_behavior_name("bhvMasterCapBox")
+local shellHudTimerMax = 40
 
 local function better_coins_compat()
     for _,mods in pairs(gActiveMods) do
@@ -95,11 +97,16 @@ for i = 0, MAX_PLAYERS - 1 do
         shellAngle = 0,
         driftTimer = 0,
         shellBoost = 0,
+        hasShell = false,
+        shellHudTimer = shellHudTimerMax,
+        shellHudPos = 0,
         highscore = mod_storage_load_integer("highscore"),
         highscoreScale = 0,
         gfxX = 0,
         gfxY = 0,
         gfxZ = 0,
+        shellX = 0,
+        shellZ = 0,
         -- spin
         stickLastAngle = 0,
         spinDirection = 0,
@@ -862,8 +869,9 @@ hook_mario_action(ACT_POLE_GRIND, act_pole_grind)
 
 local function act_evilswag_shell_ride(m)
     local e = gJerStates[m.playerIndex]
+    local o = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvKoopaShell)
     local angleDiff = math.abs(math.s16(m.intendedYaw - e.shellAngle))
-    local turnRate = (m.controller.buttonDown & L_TRIG ~= 0) and 0x200 or 0x800
+    local turnRate = (m.input & INPUT_Z_DOWN ~= 0) and 0x200 or 0x800
     local driftThreshold = 30
 
     --center_free_camera()
@@ -891,9 +899,12 @@ local function act_evilswag_shell_ride(m)
             return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 0)
         end
     end
-
-    if m.input & INPUT_Z_PRESSED ~= 0 then
+    if m.controller.buttonPressed & X_BUTTON ~= 0 then
         mario_stop_riding_object(m)
+        play_sound(SOUND_OBJ_GOOMBA_WALK, m.marioObj.header.gfx.cameraToObject)
+        set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
+        e.hasShell = true
+        e.shellHudTimer = shellHudTimerMax
         m.faceAngle.y = e.gfxY
         if m.forwardVel < 24 then
             mario_set_forward_vel(m, 24)
@@ -929,10 +940,14 @@ local function act_evilswag_shell_ride(m)
         m.faceAngle.y = e.gfxY
         return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 0);
     elseif stepResult == GROUND_STEP_HIT_WALL then
-        mario_stop_riding_object(m);
-        play_sound((m.flags & MARIO_METAL_CAP ~= 0 and SOUND_ACTION_METAL_BONK or SOUND_ACTION_BONK), m.marioObj.header.gfx.cameraToObject);
-        set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
-        return set_mario_action(m, ACT_BACKWARD_GROUND_KB, 0)
+        if m.forwardVel > 0 then
+            play_sound((m.flags & MARIO_METAL_CAP ~= 0 and SOUND_ACTION_METAL_BONK or SOUND_ACTION_BONK), m.marioObj.header.gfx.cameraToObject);
+            set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
+            --m.faceAngle.y = -0x8000
+            m.forwardVel = -30
+            m.vel.y = 30
+            return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 2)
+        end
     end
 
     if (m.floor.type == SURFACE_BURNING) then
@@ -941,11 +956,15 @@ local function act_evilswag_shell_ride(m)
         play_sound(SOUND_MOVING_TERRAIN_RIDING_SHELL + m.terrainSoundAddend, m.marioObj.header.gfx.cameraToObject);
     end
 
+    e.shellX = math.lerp(e.shellX, 0, 0.2)
+    e.shellZ = math.lerp(e.shellZ, 0, 0.2)
     e.gfxY = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - e.gfxY), 0, turnRate, turnRate)
     e.shellAngle = e.gfxY - approach_s32(math.s16(e.gfxY - e.shellAngle), 0, turnRate*0.5, turnRate*0.5)
 
     m.marioObj.header.gfx.angle.y = e.gfxY
     m.faceAngle.y = e.shellAngle
+    o.oFaceAnglePitch = e.shellX
+    o.oFaceAngleRoll = e.shellZ
 
     --tilt_body_ground_shell(m, startYaw)
     m.marioObj.header.gfx.angle.z = math.clamp(math.s16(e.gfxY - e.shellAngle), -0x1000, 0x1000)
@@ -954,7 +973,7 @@ local function act_evilswag_shell_ride(m)
     m.actionTimer = m.actionTimer + 1
     return 0
 end
-hook_mario_action(ACT_EVILSWAG_SHELL_RIDE, act_evilswag_shell_ride)
+hook_mario_action(ACT_EVILSWAG_SHELL_RIDE, act_evilswag_shell_ride, INT_FAST_ATTACK_OR_SHELL)
 
 local function act_evilswag_shell_jump(m)
     local e = gJerStates[m.playerIndex]
@@ -967,8 +986,12 @@ local function act_evilswag_shell_jump(m)
         if m.actionArg == 1 then
             e.gfxY = -0x25000
             jerComboAdd(m, e, 1, trickPoints["ollie"], "Ollie King", 2, false)
+            play_character_sound(m, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
+        elseif m.actionArg == 2 then
+            play_character_sound(m, CHAR_SOUND_DOH)
+        else
+            play_mario_sound(m, SOUND_ACTION_TERRAIN_JUMP, 0);
         end
-        play_mario_sound(m, SOUND_ACTION_TERRAIN_JUMP, 0);
         m.actionState = 1
     end
 
@@ -976,8 +999,8 @@ local function act_evilswag_shell_jump(m)
     if stepResult == AIR_STEP_LANDED then
         set_mario_action(m, ACT_RIDING_SHELL_GROUND, 0)
     elseif stepResult == AIR_STEP_HIT_WALL then
-        local wallAngle = m.wall ~= nil and (atan2s(m.wall.normal.z, m.wall.normal.x) + 0x8000) or 0
-        e.prevAngle = m.wall ~= nil and math.s16(wallAngle - m.faceAngle.y) or 0
+        local wallAngle = m.wall ~= nil and (atan2s(m.wall.normal.z, m.wall.normal.x)) or 0
+        e.prevAngle = m.wall ~= nil and math.s16((wallAngle + 0x8000) - m.faceAngle.y) or 0
         e.prevVel = m.forwardVel
         m.forwardVel = -15
         m.vel.y = 5
@@ -986,7 +1009,7 @@ local function act_evilswag_shell_jump(m)
         set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
         play_character_sound(m, CHAR_SOUND_UH)
         play_sound(SOUND_ACTION_BONK, m.marioObj.header.gfx.cameraToObject)
-        m.faceAngle.y = wallAngle
+        m.faceAngle.y = wallAngle + 0x8000
     elseif stepResult == AIR_STEP_HIT_LAVA_WALL then
         return lava_boost_on_wall(m)
     end
@@ -1004,16 +1027,29 @@ local function act_evilswag_shell_jump(m)
             play_character_sound(m, CHAR_SOUND_YAH_WAH_HOO)
         end
     end
+    if m.controller.buttonPressed & X_BUTTON ~= 0 then
+        mario_stop_riding_object(m)
+        play_sound(SOUND_OBJ_GOOMBA_WALK, m.marioObj.header.gfx.cameraToObject)
+        set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
+        e.hasShell = true
+        e.shellHudTimer = shellHudTimerMax
+        return set_mario_action(m, ACT_FORWARD_ROLLOUT, 0)
+    end
 
     e.gfxY = math.lerp(e.gfxY, 0, 0.2)
+    e.shellX = math.lerp(e.shellX, 0, 0.2)
+    e.shellZ = math.lerp(e.shellZ, 0, 0.2)
     m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+
+    o.oFaceAnglePitch = e.shellX
+    o.oFaceAngleRoll = e.shellZ
 
     m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
     m.marioObj.header.gfx.pos.y =  m.pos.y + 42
     m.actionTimer = m.actionTimer + 1
     return 0
 end
-hook_mario_action(ACT_EVILSWAG_SHELL_JUMP, act_evilswag_shell_jump)
+hook_mario_action(ACT_EVILSWAG_SHELL_JUMP, act_evilswag_shell_jump, INT_FAST_ATTACK_OR_SHELL)
 
 local FORCE_STOMP_STATE_INIT = 0
 local FORCE_STOMP_STATE_STALL = 1
@@ -1545,10 +1581,19 @@ local function jb_update(m)
         spawn_after_images(m, 2, 7, 200)
     end
 
-    -- debug shell
-    --if m.controller.buttonPressed & D_JPAD ~= 0 then
-    --    spawn_non_sync_object(id_bhvKoopaShell, E_MODEL_KOOPA_SHELL, m.pos.x, m.pos.y, m.pos.z, nil)
-    --end
+    -- store shell
+    if m.controller.buttonPressed & X_BUTTON ~= 0 and m.vel.y < -10 and m.pos.y > (m.floorHeight + 100) and e.hasShell 
+    and (m.action == ACT_JUMP
+    or m.action == ACT_FREEFALL
+    or m.action == ACT_SPINJUMP
+    or m.action == ACT_WALL_KICK_AIR
+    or m.action == ACT_SIDE_FLIP
+    or m.action == ACT_BACKFLIP) then
+        spawn_non_sync_object(id_bhvKoopaShell, E_MODEL_KOOPA_SHELL, m.pos.x, m.pos.y, m.pos.z, nil)
+        e.shellZ = 0x25000
+        e.hasShell = false
+        e.shellHudTimer = shellHudTimerMax
+    end
 end
 _G.charSelect.character_hook_moveset(CT_JB_JER, HOOK_MARIO_UPDATE, jb_update)
 
@@ -1614,6 +1659,10 @@ local function jb_set_action(m)
     end
     -- pole grind
     if m.action == ACT_GRAB_POLE_FAST then
+        if m.prevAction == ACT_EVILSWAG_SHELL_JUMP then
+            e.hasShell = true
+            e.shellHudTimer = shellHudTimerMax
+        end
         return set_mario_action(m, ACT_POLE_GRIND, ((m.controller.buttonDown & L_TRIG ~= 0 and e.fuel >= fuelCost and capCheck) and 1 or 0))
     end
     -- shell stuff
@@ -1722,6 +1771,14 @@ local function jb_hud()
     --djui_hud_print_text(("m.wall.vertex3.y = "..tostring(m.wall.vertex3.y)), 1000, 125, 1)
     --djui_hud_print_text(("m.wall.vertex3.z = "..tostring(m.wall.vertex3.z)), 1000, 150, 1)
     --end
+
+    local shellHudPosTarget = -160
+    djui_hud_render_texture_tile(TEX_JB_SHELL, e.shellHudPos, height/2, 2, 4, 0, e.hasShell and 16 or 0, 32, 16)
+    if e.shellHudTimer > 0 then
+        e.shellHudTimer = e.shellHudTimer - 1
+        shellHudPosTarget = 45
+    end
+    e.shellHudPos = math.lerp(e.shellHudPos, shellHudPosTarget, 0.2)
 
     local speedometerScale = widescreenCheck and 3 or 2
         djui_hud_render_texture_tile(TEX_JB_SPEEDOMETER_JER, width - speedometerScale * 128, height - speedometerScale * 128, speedometerScale, speedometerScale, 0, 0, 128, 128)
@@ -1912,3 +1969,14 @@ local function save_highscore()
     end
 end
 hook_event(HOOK_UPDATE, save_highscore)
+
+charSelect.hook_on_character_change(function()
+    local m = gMarioStates[0]
+    local e = gJerStates[m.playerIndex]
+    local currChar = charSelect.character_get_current_number()
+    if currChar == CT_JB_JER then
+        e.shellHudTimer = shellHudTimerMax
+    else
+        e.shellHudTimer = 0
+    end
+end)
