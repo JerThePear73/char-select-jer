@@ -1036,6 +1036,7 @@ local function act_evilswag_shell_jump(m)
             m.vel.y = 5
             m.actionState = 2
             m.actionTimer = 0
+            m.actionArg = ARG_SHELL_JUMP
             set_mario_particle_flags(m, PARTICLE_VERTICAL_STAR, 0)
             play_character_sound(m, CHAR_SOUND_UH)
             play_sound(SOUND_ACTION_BONK, m.marioObj.header.gfx.cameraToObject)
@@ -1045,7 +1046,7 @@ local function act_evilswag_shell_jump(m)
         return lava_boost_on_wall(m)
     end
 
-    if m.actionState == 2 and m.actionTimer <= 5 then
+    if m.actionState == 2 and m.actionTimer <= 5 and m.actionArg ~= ARG_SHELL_BUMP and m.pos.y > (m.floorHeight + 50) then
         if m.input & INPUT_A_PRESSED ~= 0 then
             m.faceAngle.y = m.faceAngle.y + 0x8000 + e.prevAngle
             m.vel.y = 40
