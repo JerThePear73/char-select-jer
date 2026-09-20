@@ -937,6 +937,7 @@ local function act_evilswag_shell_ride(m)
     end
     if e.shellBoost > 0 then
         e.shellBoost = e.shellBoost - 1
+        play_sound(SOUND_AIR_BOWSER_SPIT_FIRE, m.marioObj.header.gfx.cameraToObject)
         set_mario_particle_flags(m, PARTICLE_FIRE, 0)
     end
     mario_set_forward_vel(m, math.clamp(m.forwardVel, -64, 64) + e.shellBoost)
