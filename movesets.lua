@@ -13,10 +13,6 @@ local ACT_POLE_GRIND = allocate_mario_action(ACT_GROUP_AUTOMATIC | ACT_FLAG_ON_P
 local ACT_EVILSWAG_SHELL_RIDE = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_RIDING_SHELL)
 local ACT_EVILSWAG_SHELL_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_CONTROL_JUMP_HEIGHT | ACT_FLAG_RIDING_SHELL)
 
-local function convert_s16(a)
-    return (a + 0x8000) % 0x10000 - 0x8000
-end
-
 local ANGLE_QUEUE_SIZE = 9
 local SPIN_TIMER_SUCCESSFUL_INPUT = 4
 
@@ -395,7 +391,7 @@ local function act_boost(m)
         smlua_anim_util_set_animation(m.marioObj, "jb_anim_boost_steer")
         mario_set_forward_vel(m, e.boostSpeed)
 
-        local dYaw = convert_s16(m.faceAngle.y - m.intendedYaw)
+        local dYaw = math.s16(m.faceAngle.y - m.intendedYaw)
         local val04 = (dYaw * m.forwardVel / 12)
         local max = 30
 
@@ -419,7 +415,7 @@ local function act_boost(m)
 
     m.vel.y = math.clamp((m.vel.y + 3), -20, 0)
     e.boostSpeed = math.clamp((e.boostSpeed + 1), 30, metalCheck and 100 or 73)
-    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
     m.marioObj.header.gfx.pos.y = m.pos.y - 50
     m.peakHeight = m.pos.y
     e.fuel = e.fuel - 1
@@ -508,7 +504,7 @@ local function act_break_down(m)
         end
     end
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 500, 500)
+    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 500, 500)
 
     if e.boostSpeed > 30 then
         set_mario_particle_flags(m, PARTICLE_DUST, 0)
@@ -557,7 +553,7 @@ hook_mario_action(ACT_BREAK_DOWN, act_break_down)
 
 local function act_rail_grind(m)
     local e = gJerStates[m.playerIndex]
-    local intendedDYaw = convert_s16(m.intendedYaw - m.faceAngle.y)
+    local intendedDYaw = math.s16(m.intendedYaw - m.faceAngle.y)
     local speed = 45
 
     --center_free_camera()
@@ -665,7 +661,7 @@ local function act_rail_grind(m)
 
     local checkFront = m.pos.y - find_floor_height_relative_polar(m, 0, 2)
     local tilt = math.tan(checkFront/2)*6000
-    e.gfxY = m.faceAngle.y - math.lerp(convert_s16(m.faceAngle.y - e.gfxY), 0, 0.5)
+    e.gfxY = m.faceAngle.y - math.lerp(math.s16(m.faceAngle.y - e.gfxY), 0, 0.5)
     m.marioObj.header.gfx.angle.x = tilt
     m.marioObj.header.gfx.angle.y = e.gfxY
 
@@ -1074,7 +1070,7 @@ local function act_evilswag_shell_jump(m)
     e.gfxY = math.lerp(e.gfxY, 0, 0.2)
     e.shellX = math.lerp(e.shellX, 0, 0.2)
     e.shellZ = math.lerp(e.shellZ, 0, 0.2)
-    m.faceAngle.y = m.intendedYaw - approach_s32(convert_s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
 
     o.oFaceAnglePitch = e.shellX
     o.oFaceAngleRoll = e.shellZ
@@ -1685,7 +1681,7 @@ local function jb_set_action(m)
         e.railTrick = -1
     end
     -- rail grind
-    if (m.action == ACT_LEDGE_GRAB or m.action == ACT_LEDGE_CLIMB_DOWN) and m.floor.normal.y > 0.6 and (math.abs(convert_s16(m.intendedYaw - m.faceAngle.y)) > railGrindRange or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
+    if (m.action == ACT_LEDGE_GRAB or m.action == ACT_LEDGE_CLIMB_DOWN) and m.floor.normal.y > 0.6 and (math.abs(math.s16(m.intendedYaw - m.faceAngle.y)) > railGrindRange or m.floor.normal.y < 0.9063078) and m.input & INPUT_NONZERO_ANALOG ~= 0 then
         return set_mario_action(m, ACT_RAIL_GRIND, 0)
     end
     -- spinjump
@@ -1793,7 +1789,7 @@ local function jb_hud()
     --djui_hud_print_text(("m.floor.normal.x = "..tostring(m.floor.normal.x)), 75, 250, 1)
     --djui_hud_print_text(("m.floor.normal.y = "..tostring(m.floor.normal.y)), 75, 275, 1)
     --djui_hud_print_text(("m.floor.normal.z = "..tostring(m.floor.normal.z)), 75, 300, 1)
-    --djui_hud_print_text(("intendedDYaw = "..tostring(convert_s16(m.intendedYaw - m.faceAngle.y))), 75, 325, 1)
+    --djui_hud_print_text(("intendedDYaw = "..tostring(math.s16(m.intendedYaw - m.faceAngle.y))), 75, 325, 1)
     --djui_hud_print_text(("m.actionTimer = "..tostring(m.actionTimer)), 75, 350, 1)
     --djui_hud_print_text(("m.actionArg = "..tostring(m.actionArg)), 75, 375, 1)
     --djui_hud_print_text(("animFrame = "..tostring(m.marioObj.header.gfx.animInfo.animFrame)), 75, 400, 1)
