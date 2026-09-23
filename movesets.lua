@@ -316,7 +316,6 @@ local function act_jernado(m)
         end
     end
 
-    
     if m.actionTimer < 30 and m.action ~= ACT_FREEFALL then
         local target = 18 - (m.actionTimer * (math.abs(m.forwardVel/25)))
 
@@ -392,16 +391,10 @@ local function act_boost(m)
         mario_set_forward_vel(m, e.boostSpeed)
 
         local dYaw = math.s16(m.faceAngle.y - m.intendedYaw)
-        local val04 = (dYaw * m.forwardVel / 12)
         local max = 30
+        local val04 = math.clamp((dYaw * m.forwardVel / 12), -max, max)
 
-        if val04 > max then
-            val04 = max;
-        end
-        if val04 < -max then
-            val04 = -max;
-        end
-        e.gfxY = approach_s32(e.gfxY, val04, 3, 3)
+        e.gfxY = approach_s16_symmetric(e.gfxY, val04, 3)
 
         set_anim_to_frame(m, (30 + e.gfxY))
     end
@@ -415,7 +408,7 @@ local function act_boost(m)
 
     m.vel.y = math.clamp((m.vel.y + 3), -20, 0)
     e.boostSpeed = math.clamp((e.boostSpeed + 1), 30, metalCheck and 100 or 73)
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x200)
     m.marioObj.header.gfx.pos.y = m.pos.y - 50
     m.peakHeight = m.pos.y
     e.fuel = e.fuel - 1
@@ -460,13 +453,14 @@ local function act_trick(m)
         m.actionState = 1
     end
 
-    local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
+    local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND_STOP, CHAR_ANIM_BREAKDANCE, AIR_STEP_NONE)
     if stepResult == AIR_STEP_LANDED then
         m.actionArg = 0
     end
     if m.actionTimer == 20 then
-        m.action = ACT_FREEFALL
-        m.actionArg = 0
+        set_mario_action(m, ACT_FREEFALL, 0)
+        --m.action == ACT_FREEFALL
+        --m.actionArg = 0
     end
 
     if m.vel.y < 0 then m.vel.y = m.vel.y + 1 end
@@ -504,7 +498,7 @@ local function act_break_down(m)
         end
     end
 
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 500, 500)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 500)
 
     if e.boostSpeed > 30 then
         set_mario_particle_flags(m, PARTICLE_DUST, 0)
@@ -521,7 +515,7 @@ local function act_break_down(m)
     end
 
     e.boostSpeed = (e.boostSpeed - 0.2 + (e.prevPosY - m.pos.y)/(metalCheck and 5 or 10))
-    if e.boostSpeed == 15 then
+    if e.boostSpeed <= 15 then
         set_mario_action(m, ACT_BUTT_SLIDE_STOP, 0)
     end
 
@@ -530,8 +524,11 @@ local function act_break_down(m)
         m.vel.y = 30
         return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     elseif m.input & INPUT_B_PRESSED ~= 0 then
+        local velTrade = math.max(m.forwardVel - 30, 0)*0.75
+        m.forwardVel = m.forwardVel - velTrade
+        m.vel.y = 50 + velTrade
         m.pos.y = m.pos.y + 5
-        return set_mario_action(m, ACT_DIVE, 0)
+        return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
 
     if m.actionTimer > 29 then
@@ -812,37 +809,31 @@ local function act_pole_grind(m)
         m.forwardVel = 0
         m.vel.x = 0
         m.vel.z = 0
+        e.prevPosY = 0
         e.canJernado = true
         e.canDash = true
         e.canBoost = true
-        if m.actionArg == 1 then
-            e.fuel = e.fuel - fuelCost
-            jerComboAdd(m, e, 1, trickPoints["pole"], "Whirlybird", 2, false)
-            set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
-        end
+        e.fuel = e.fuel - fuelCost
+        jerComboAdd(m, e, 1, trickPoints["pole"], "Whirlybird", 2, false)
+        set_mario_particle_flags(m, PARTICLE_HORIZONTAL_STAR, 0)
         m.actionState = 1
     end
 
     if m.actionTimer <= 1 then
-        e.gfxY = 0x10000 * (2 * m.actionArg)
+        e.gfxY = 0x20000
     end
 
-    if m.actionTimer < 15 and m.actionArg == 1 then
+    if m.actionTimer < 15 then
         set_mario_particle_flags(m, PARTICLE_FIRE, 0)
-    elseif m.actionTimer % (m.actionArg == 1 and 3 or 5) == 0 then
-        jerComboAdd(m, e, 0, trickPoints["grind"], m.actionArg == 0 and "VTEC Power" or "Just One Wing", 0, false)
+    elseif m.actionTimer % 5 == 0 then
+        jerComboAdd(m, e, 0, trickPoints["grind"], "Just One Wing", 0, false)
     end
 
     if m.pos.y > poleTop then -- reached top
-        if m.input & INPUT_Z_DOWN ~= 0 or m.actionArg == 0 then
-            m.marioObj.oMarioPolePos = poleTop
-            return set_mario_action(m, ACT_TOP_OF_POLE_TRANSITION, 0)
-        else
-            return set_mario_action(m, ACT_BACKFLIP, 0)
-        end
+        return set_mario_action(m, ACT_BACKFLIP, 0)
     elseif m.vel.y < 0 then -- hit roof
-        m.pos.y = m.pos.y - 10
-        return set_mario_action(m, ACT_JUMP, 0)
+        m.marioObj.oMarioPolePos = m.marioObj.oMarioPolePos - 50
+        return set_mario_action(m, ACT_GRAB_POLE_SLOW, 0)
     elseif m.input & INPUT_A_PRESSED ~= 0 then -- ended early
         m.pos.x = m.pos.x + (-100 * sins(m.faceAngle.y))
         m.pos.z = m.pos.z + (-100 * coss(m.faceAngle.y))
@@ -851,7 +842,8 @@ local function act_pole_grind(m)
     else
         m.pos.x = o.oPosX
         m.pos.z = o.oPosZ
-        m.vel.y = 25 + (15 * m.actionArg)
+        m.vel.y = 35
+        m.marioObj.oMarioPolePos = m.marioObj.oMarioPolePos + m.vel.y
         play_sound(SOUND_MOVING_TERRAIN_SLIDE, m.marioObj.header.gfx.cameraToObject)
     end
 
@@ -891,14 +883,13 @@ local function act_evilswag_shell_ride(m)
     end
 
     if m.input & INPUT_A_PRESSED ~= 0 then
+        m.faceAngle.y = e.gfxY
+        m.vel.y = 30 + math.abs(m.forwardVel/2)
         if e.driftTimer >= driftThreshold then
-            m.vel.y = 60
             m.forwardVel = m.forwardVel + 5
             m.faceAngle.y = e.gfxY
             return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, 1)
         else
-            m.vel.y = 40
-            m.faceAngle.y = e.gfxY
             return set_mario_action(m, ACT_EVILSWAG_SHELL_JUMP, ARG_SHELL_JUMP)
         end
     end
@@ -970,8 +961,8 @@ local function act_evilswag_shell_ride(m)
 
     e.shellX = math.lerp(e.shellX, 0, 0.2)
     e.shellZ = math.lerp(e.shellZ, 0, 0.2)
-    e.gfxY = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - e.gfxY), 0, turnRate, turnRate)
-    e.shellAngle = e.gfxY - approach_s32(math.s16(e.gfxY - e.shellAngle), 0, turnRate*0.5, turnRate*0.5)
+    e.gfxY = approach_s16_symmetric(e.gfxY, m.intendedYaw, turnRate)
+    e.shellAngle = approach_s16_symmetric(e.shellAngle, e.gfxY, turnRate*0.5)
 
     m.marioObj.header.gfx.angle.y = e.gfxY
     m.faceAngle.y = e.shellAngle
@@ -990,6 +981,7 @@ hook_mario_action(ACT_EVILSWAG_SHELL_RIDE, act_evilswag_shell_ride, INT_FAST_ATT
 local function act_evilswag_shell_jump(m)
     local e = gJerStates[m.playerIndex]
     local o = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvKoopaShell)
+    if not o then return end
     if m.actionArg == nil then m.actionArg = -1 end
     local setAnim = "jb_anim_shell_ride_jump"
     local setHands = MARIO_HAND_OPEN
@@ -1045,7 +1037,6 @@ local function act_evilswag_shell_jump(m)
     if m.actionState == 2 and m.actionTimer <= 5 and m.actionArg ~= ARG_SHELL_BUMP and m.pos.y > (m.floorHeight + 50) then
         if m.input & INPUT_A_PRESSED ~= 0 then
             m.faceAngle.y = m.faceAngle.y + 0x8000 + e.prevAngle
-            m.vel.y = 40
             if m.actionTimer == 0 then
                 m.actionState = 0
                 m.actionArg = 3
@@ -1055,6 +1046,7 @@ local function act_evilswag_shell_jump(m)
                 set_anim_to_frame(m, 0)
             end
             m.forwardVel = m.actionTimer == 0 and e.prevVel or 40
+            m.vel.y = 30 + math.abs(m.forwardVel/2)
         end
     end
     if m.controller.buttonPressed & X_BUTTON ~= 0 then
@@ -1070,7 +1062,7 @@ local function act_evilswag_shell_jump(m)
     e.gfxY = math.lerp(e.gfxY, 0, 0.2)
     e.shellX = math.lerp(e.shellX, 0, 0.2)
     e.shellZ = math.lerp(e.shellZ, 0, 0.2)
-    m.faceAngle.y = m.intendedYaw - approach_s32(math.s16(m.intendedYaw - m.faceAngle.y), 0, 0x200, 0x200)
+    m.faceAngle.y = approach_s16_symmetric(m.faceAngle.y, m.intendedYaw, 0x200)
 
     o.oFaceAnglePitch = e.shellX
     o.oFaceAngleRoll = e.shellZ
@@ -1450,7 +1442,7 @@ local function jb_update(m)
     -- running tilt
     if m.action == ACT_WALKING then
         if m.marioObj.header.gfx.animInfo.animID == MARIO_ANIM_RUNNING then
-            e.gfxZ = approach_s32(e.gfxZ, m.marioBodyState.torsoAngle.z, 0x200, 0x200)
+            e.gfxZ = approach_s16_symmetric(e.gfxZ, m.marioBodyState.torsoAngle.z, 0x200)
             m.marioObj.header.gfx.angle.z = e.gfxZ
         end
     end
@@ -1695,7 +1687,9 @@ local function jb_set_action(m)
             e.hasShell = true
             e.shellHudTimer = shellHudTimerMax
         end
-        return set_mario_action(m, ACT_POLE_GRIND, ((m.controller.buttonDown & L_TRIG ~= 0 and e.fuel >= fuelCost and capCheck) and 1 or 0))
+        if m.controller.buttonDown & L_TRIG ~= 0 and e.fuel >= fuelCost and capCheck then
+            return set_mario_action(m, ACT_POLE_GRIND, 0)
+        end
     end
     -- shell stuff
     if m.action == ACT_RIDING_SHELL_JUMP then
@@ -1721,12 +1715,13 @@ local function jb_before_set_action(m, act)
             return ACT_BRAKING_STOP
         end
     -- Set vanilla attacks to tricks
-    elseif act == ACT_DIVE or (act == ACT_JUMP_KICK and (m.pos.y > m.floorHeight and m.action ~= ACT_LEDGE_GRAB)) then
-        if m.action & ACT_FLAG_AIR == 0 then
-            local velTrade = math.max(m.forwardVel - 30, 0)*0.75
-            m.forwardVel = m.forwardVel - velTrade
-            m.vel.y = 50 + velTrade
-        end
+    elseif ((act == ACT_DIVE and m.action & ACT_FLAG_AIR ~= 0)
+        or (act == ACT_JUMP_KICK and (m.pos.y > m.floorHeight and m.action ~= ACT_LEDGE_GRAB))) then -- squishy gonna hate me for this one
+        --if m.action & ACT_FLAG_AIR == 0 then
+        --    local velTrade = math.max(m.forwardVel - 30, 0)*0.75
+        --    m.forwardVel = m.forwardVel - velTrade
+        --    m.vel.y = 50 + velTrade
+        --end
         m.actionTimer = 0
         return set_mario_action(m, ACT_TRICK, math.random(0, #trickTable))
     end
