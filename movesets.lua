@@ -1654,8 +1654,8 @@ local function jb_set_action(m)
     end
     -- spinjump
     if (m.action == ACT_JUMP or m.action == ACT_STEEP_JUMP or (m.action == ACT_SIDE_FLIP and m.actionArg ~= 73)) and e.spinInput ~= 0 then
-        m.vel.y = 55
         set_mario_action(m, ACT_SIDE_FLIP, 73)
+        m.vel.y = 55
     end
     -- pole grind
     if m.action == ACT_GRAB_POLE_FAST then
