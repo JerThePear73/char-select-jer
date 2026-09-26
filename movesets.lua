@@ -8,7 +8,6 @@ local ACT_BREAK_DOWN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING 
 local ACT_RAIL_GRIND = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_INTANGIBLE)
 local ACT_FORCE_STOMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
 local ACT_SCREW_SPIN = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING) -- | ACT_FLAG_INTANGIBLE)
-local ACT_SPINJUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 local ACT_POLE_GRIND = allocate_mario_action(ACT_GROUP_AUTOMATIC | ACT_FLAG_ON_POLE)-- | ACT_FLAG_INTANGIBLE)
 local ACT_EVILSWAG_SHELL_RIDE = allocate_mario_action(ACT_GROUP_MOVING | ACT_FLAG_MOVING | ACT_FLAG_RIDING_SHELL)
 local ACT_EVILSWAG_SHELL_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_CONTROL_JUMP_HEIGHT | ACT_FLAG_RIDING_SHELL)
@@ -756,46 +755,6 @@ local function act_screw_spin(m)
 end
 hook_mario_action(ACT_SCREW_SPIN, act_screw_spin)
 
-local function act_spinjump(m)
-    local e = gJerStates[m.playerIndex]
-    m.marioBodyState.handState = MARIO_HAND_OPEN
-
-    if m.actionState == 0 then
-        play_character_sound(m, CHAR_SOUND_SPINJUMP)
-        e.gfxY = 0
-        m.vel.y = 55
-        m.actionState = 1
-    end
-
-    if m.actionTimer <= (m.actionArg == 1 and 21 or 12) then
-        for i=0, m.actionTimer do
-            if m.actionTimer % 3 == 0 then
-                play_sound_with_freq_scale(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject, 1 + (i/12)*1.5)
-            end
-        end
-    elseif m.input & INPUT_Z_PRESSED ~= 0 then
-        return set_mario_action(m, ACT_GROUND_POUND, 0)
-    end
-    if m.actionArg == 1 and m.vel.y > 10 then
-        set_mario_particle_flags(m, PARTICLE_MIST_CIRCLE, 0)
-    end
-
-    local stepResult = common_air_action_step(m, ACT_FREEFALL_LAND, MARIO_ANIM_START_TWIRL, AIR_STEP_CHECK_LEDGE_GRAB)
-    if stepResult == AIR_STEP_HIT_WALL then
-        set_mario_action(m, ACT_AIR_HIT_WALL, 0)
-    elseif stepResult == AIR_STEP_GRABBED_LEDGE then
-        m.marioObj.header.gfx.animInfo.animID = -1
-    end
-
-    e.gfxY = e.gfxY + 0x4000
-    m.vel.y = m.vel.y + 1
-    m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
-
-    m.actionTimer = m.actionTimer + 1
-    return 0
-end
-hook_mario_action(ACT_SPINJUMP, act_spinjump)
-
 local function act_pole_grind(m)
     local e = gJerStates[m.playerIndex]
     local o = m.usedObj
@@ -1403,7 +1362,7 @@ local function jb_update(m)
         [ACT_JUMP]              = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
         [ACT_FREEFALL]          = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
         [ACT_WALL_KICK_AIR]     = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
-        [ACT_SIDE_FLIP]         = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
+        [ACT_SIDE_FLIP]         = {dash = true,                 boost = true,                   jernado = m.actionArg ~= 73,    trick = true                },
         [ACT_BACKFLIP]          = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
         [ACT_FORWARD_ROLLOUT]   = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
         [ACT_BACKWARD_ROLLOUT]  = {dash = (m.vel.y < -10),      boost = true,                   jernado = true,                 trick = true                },
@@ -1414,7 +1373,6 @@ local function jb_update(m)
         [ACT_WALKING]           = {dash = false,                boost = true,                   jernado = false,                trick = false               },
         [ACT_IDLE]              = {dash = false,                boost = true,                   jernado = false,                trick = false               },
         [ACT_GROUND_POUND]      = {dash = false,                boost = false,                  jernado = true,                 trick = false               },
-        [ACT_SPINJUMP]          = {dash = true,                 boost = true,                   jernado = false,                trick = true                },
         [ACT_BUTT_SLIDE_AIR]    = {dash = false,                boost = false,                  jernado = false,                trick = true                },
         [ACT_FORCE_STOMP]       = {dash = (m.actionTimer > 12), boost = (m.actionTimer > 12),   jernado = (m.actionTimer > 12), trick = (m.actionTimer > 12)},
     }
@@ -1599,6 +1557,25 @@ local function jb_update(m)
         spawn_non_sync_object(id_bhvCoinSparkles, E_MODEL_RED_FLAME, foot1.x, foot1.y - yOffset, foot1.z, nil)
         spawn_non_sync_object(id_bhvCoinSparkles, E_MODEL_RED_FLAME, foot2.x, foot2.y - yOffset, foot2.z, nil)
     end
+    -- spinjump
+    if m.action == ACT_SIDE_FLIP and m.actionArg == 73 then
+        if m.marioObj.header.gfx.animInfo.animFrame == -1 then
+            play_character_sound(m, CHAR_SOUND_SPINJUMP)
+        end
+        if m.actionTimer <= 12 then
+            for i=0, m.actionTimer do
+                if m.actionTimer % 3 == 0 then
+                    play_sound_with_freq_scale(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject, 1 + (i/12)*1.5)
+                end
+            end
+        end
+
+        e.gfxY = e.gfxY + 0x4000
+        m.vel.y = m.vel.y + 1
+        m.marioObj.header.gfx.angle.y = m.faceAngle.y + e.gfxY
+
+        m.actionTimer = m.actionTimer + 1
+    end
     -- after images
     if (m.forwardVel >= 80 or (m.action == ACT_FORCE_STOMP and m.vel.y > 50)) and m.flags & MARIO_VANISH_CAP == 0 then
         spawn_after_images(m, 2, 7, 200)
@@ -1608,7 +1585,6 @@ local function jb_update(m)
     if m.controller.buttonPressed & X_BUTTON ~= 0 and m.vel.y < -10 and m.pos.y > (m.floorHeight + 100) and e.hasShell
     and (m.action == ACT_JUMP
     or m.action == ACT_FREEFALL
-    or m.action == ACT_SPINJUMP
     or m.action == ACT_WALL_KICK_AIR
     or m.action == ACT_SIDE_FLIP
     or m.action == ACT_BACKFLIP
@@ -1677,9 +1653,9 @@ local function jb_set_action(m)
         return set_mario_action(m, ACT_RAIL_GRIND, 0)
     end
     -- spinjump
-    if (m.action == ACT_JUMP or m.action == ACT_SIDE_FLIP or m.action == ACT_STEEP_JUMP) and e.spinInput ~= 0 then
-        m.faceAngle.y = m.intendedYaw
-        set_mario_action(m, ACT_SPINJUMP, 0)
+    if (m.action == ACT_JUMP or m.action == ACT_STEEP_JUMP or (m.action == ACT_SIDE_FLIP and m.actionArg ~= 73)) and e.spinInput ~= 0 then
+        m.vel.y = 55
+        set_mario_action(m, ACT_SIDE_FLIP, 73)
     end
     -- pole grind
     if m.action == ACT_GRAB_POLE_FAST then
@@ -1714,6 +1690,8 @@ local function jb_before_set_action(m, act)
         if e.railTrick ~= -1 then
             return ACT_BRAKING_STOP
         end
+    elseif m.action == ACT_SIDE_FLIP and m.actionArg == 73 and act == ACT_SIDE_FLIP_LAND then
+        return ACT_FREEFALL_LAND
     -- Set vanilla attacks to tricks
     elseif ((act == ACT_DIVE and m.action & ACT_FLAG_AIR ~= 0)
         or (act == ACT_JUMP_KICK and (m.pos.y > m.floorHeight and m.action ~= ACT_LEDGE_GRAB))) then -- squishy gonna hate me for this one

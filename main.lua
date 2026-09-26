@@ -22,6 +22,8 @@ _G.charSelect.credit_add(TEXT_MOD_NAME, "Wibblus", "Physbones")
 -- Textures --
 local TEX_JB_JER = get_texture_info('jb_icon_jer')
 local TEX_ART_JB_JER = get_texture_info('jb_graffiti_jer')
+local TEX_HEALTH_JB_JER = get_texture_info('jb_hud_health_jer')
+local TEX_HEALTH_PIE = get_texture_info('jb_hud_health_pie')
 
 -- Sound --
 local SOUND_MENU_THEME_JB_JER = audio_stream_load('jb_menu_theme.ogg')
@@ -211,7 +213,6 @@ local PALETTES_JB_JER = {
 
 local ANIMTABLE_JB_JER = {
 --    [_G.charSelect.CS_ANIM_MENU] = "jb_anim_menu", -- wip
-    [MARIO_ANIM_SLIDEFLIP]              = "jb_anim_slideflip",
     [MARIO_ANIM_SLIDEJUMP]              = "jb_anim_wallkick",
     [MARIO_ANIM_WALKING]                = "jb_anim_nephew_stride",
     [MARIO_ANIM_IDLE_HEAD_LEFT]         = "jb_anim_idle",
@@ -240,6 +241,13 @@ local ANIMTABLE_JB_JER = {
                                                 m.particleFlags = m.particleFlags | PARTICLE_DUST
                                             end
                                             return "jb_anim_run"
+                                        end,
+    [CHAR_ANIM_SLIDEFLIP]                = function(m, frame)
+                                            if m.actionArg == 73 then
+                                                return "cr_anim_j355_ice_jump_2"
+                                            else
+                                                return "cr_anim_j355_slideflip"
+                                            end
                                         end,
 }
 
@@ -301,14 +309,19 @@ local function on_character_select_load()
     end
 
     -- Model dependant
-    _G.charSelect.character_add_animations(E_MODEL_JB_JER, ANIMTABLE_JB_JER, EYETABLE_JB_JER, HANDTABLE_JB_JER)
-    --_G.charSelect.character_add_caps(E_MODEL_JB_JER, CAP_JB_JER)
-    _G.charSelect.character_add_voice(E_MODEL_JB_JER, VOICETABLE_JB_JER)
+    charSelect.character_add_animations(E_MODEL_JB_JER, ANIMTABLE_JB_JER, EYETABLE_JB_JER, HANDTABLE_JB_JER)
+    --charSelect.character_add_caps(E_MODEL_JB_JER, CAP_JB_JER)
+    charSelect.character_add_voice(E_MODEL_JB_JER, VOICETABLE_JB_JER)
+    charSelect.character_add_graffiti(CT_JB_JER, TEX_ART_JB_JER)
+    charSelect.character_add_menu_instrumental(CT_JB_JER, SOUND_MENU_THEME_JB_JER)
+    charSelect.character_add_health_meter(CT_JB_JER, function (localIndex, health, prevX, prevY, prevScaleX, prevScaleY, x, y, scaleX, scaleY)
+        local segments = health >> 8
 
-    -- Char dependant
-    --_G.charSelect.character_add_health_meter(CT_JB_JER, HEALTH_METER_JB_JER)
-    _G.charSelect.character_add_graffiti(CT_JB_JER, TEX_ART_JB_JER)
-    _G.charSelect.character_add_menu_instrumental(CT_JB_JER, SOUND_MENU_THEME_JB_JER)
+        djui_hud_render_texture(TEX_HEALTH_JB_JER, x, y, 1, 1)
+        if segments > 0 then
+            djui_hud_render_texture_tile(TEX_HEALTH_PIE, x + 16, y + 16, 1, 1, (32 * (segments - 1)), 0, 32, 32)
+        end
+    end)
 
     -- Categories
     _G.charSelect.character_set_category(CT_JB_JER, "Squishy Workshop")
