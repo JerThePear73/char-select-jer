@@ -244,9 +244,9 @@ local ANIMTABLE_JB_JER = {
                                         end,
     [CHAR_ANIM_SLIDEFLIP]                = function(m, frame)
                                             if m.actionArg == 73 then
-                                                return "cr_anim_j355_ice_jump_2"
+                                                return "jb_anim_spinjump"
                                             else
-                                                return "cr_anim_j355_slideflip"
+                                                return "jb_anim_slideflip"
                                             end
                                         end,
 }
