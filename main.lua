@@ -291,16 +291,14 @@ local HANDTABLE_JB_JER = {
 --    }
 --}
 
-if _G.charSelectExists then
-    CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with that need for speed. Press L to boost!"},
-        "JerThePear",
-        {r = 000, g = 255, b = 000},
-        E_MODEL_JB_JER,
-        CT_MARIO,
-        TEX_JB_JER,
-        1.25
-    )
-end
+CT_JB_JER = _G.charSelect.character_add("Jer", { "A helmet man with that need for speed. Press L to boost!"},
+    "JerThePear",
+    {r = 000, g = 255, b = 000},
+    E_MODEL_JB_JER,
+    CT_MARIO,
+    TEX_JB_JER,
+    1.25
+)
 
 local CSloaded = false
 local function on_character_select_load()

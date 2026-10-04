@@ -42,15 +42,6 @@ local shellHudTimerMax = 70
 local ARG_SHELL_JUMP = 0
 local ARG_SHELL_BUMP = 255
 
-local function better_coins_compat()
-    for _,mods in pairs(gActiveMods) do
-        if mods.name == "Better Coins" then
-            betterCoins = true
-        end
-    end
-end
-hook_event(HOOK_ON_MODS_LOADED, better_coins_compat)
-
 local function pause_check()
     local m = gMarioStates[0]
 
@@ -110,7 +101,9 @@ for i = 0, MAX_PLAYERS - 1 do
         spinBufferTimer = 0,
         spinInput = 0,
         lastStickMag = 0,
-        angleDeltaQueue = {}
+        angleDeltaQueue = {},
+        -- cool shit
+        isKirby = false,
     }
     for j=0,(ANGLE_QUEUE_SIZE-1) do gJerStates[i].angleDeltaQueue[j] = 0 end
 end
@@ -400,6 +393,10 @@ local function act_boost(m)
 
     local stepResult = common_air_action_step(m, ACT_BRAKING, MARIO_ANIM_DOUBLE_JUMP_FALL, AIR_STEP_CHECK_LEDGE_GRAB)
     if stepResult == AIR_STEP_HIT_WALL then
+        if e.isKirby then
+            m.forwardVel = -50
+            return set_mario_action(m, ACT_FORWARD_ROLLOUT, 0)
+        end
         return set_mario_action(m, ACT_AIR_HIT_WALL, 0)
     elseif stepResult == AIR_STEP_GRABBED_LEDGE then
         m.marioObj.header.gfx.animInfo.animID = -1
@@ -1355,10 +1352,13 @@ local comboPreserveActions = {
     [ACT_EVILSWAG_SHELL_RIDE]   = true,
 }
 
+local actionChecks = nil
+local isKirby = false
 local function jb_update(m)
     local e = gJerStates[m.playerIndex]
+    e.isKirby = isKirby
     local capCheck = m.flags & MARIO_CAP_ON_HEAD ~= 0
-    local actionChecks = {
+    actionChecks = {
         [ACT_JUMP]              = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
         [ACT_FREEFALL]          = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
         [ACT_WALL_KICK_AIR]     = {dash = true,                 boost = true,                   jernado = true,                 trick = true                },
@@ -1396,6 +1396,35 @@ local function jb_update(m)
         end
         loaded = true
     end
+
+
+    -- jernado
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].jernado) and e.canJernado and e.spinInput ~= 0 and m.pos.y > m.floorHeight then
+        if m.action ~= ACT_SIDE_FLIP or m.marioObj.header.gfx.animInfo.animFrame >= 10 then
+            set_mario_action(m, ACT_JERNADO, 0)
+            e.canJernado = false
+        end
+    end
+
+    -- boost
+    if isKirby and m.action & ACT_FLAG_AIR == 0 then
+        e.canBoost = true
+        e.fuel = fuelMax*0.5
+    end
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].boost) and e.canBoost and m.controller.buttonPressed & L_TRIG ~= 0 and e.fuel > 0 and capCheck then
+        set_mario_action(m, ACT_BOOST, 0)
+        m.marioObj.header.gfx.animInfo.animID = -1
+        set_anim_to_frame(m, 0)
+        m.vel.y = 5
+        m.pos.y = m.pos.y + 50
+        m.actionTimer = 0
+        e.boostSpeed = m.forwardVel
+        e.gfxY = 0
+        e.canBoost = false
+    end
+
+    -- Cut off to simplify moveset for kirby
+    if isKirby then return end
 
     -- running tilt
     if m.action == ACT_WALKING then
@@ -1490,25 +1519,6 @@ local function jb_update(m)
     if (actionChecks[m.action] ~= nil and actionChecks[m.action].dash) and e.canDash and m.vel.y < 20 and m.input & INPUT_A_PRESSED ~= 0 and m.pos.y > m.floorHeight and capCheck then
         set_mario_action(m, ACT_DASH, 0)
         e.canDash = false
-    end
-    -- jernado
-    if (actionChecks[m.action] ~= nil and actionChecks[m.action].jernado) and e.canJernado and e.spinInput ~= 0 and m.pos.y > m.floorHeight then
-        if m.action ~= ACT_SIDE_FLIP or m.marioObj.header.gfx.animInfo.animFrame >= 10 then
-            set_mario_action(m, ACT_JERNADO, 0)
-            e.canJernado = false
-        end
-    end
-    -- boost
-    if (actionChecks[m.action] ~= nil and actionChecks[m.action].boost) and e.canBoost and m.controller.buttonPressed & L_TRIG ~= 0 and e.fuel > 0 and capCheck then
-        set_mario_action(m, ACT_BOOST, 0)
-        m.marioObj.header.gfx.animInfo.animID = -1
-        set_anim_to_frame(m, 0)
-        m.vel.y = 5
-        m.pos.y = m.pos.y + 50
-        m.actionTimer = 0
-        e.boostSpeed = m.forwardVel
-        e.gfxY = 0
-        e.canBoost = false
     end
     -- speedkick anim
     if m.action == ACT_JUMP_KICK and m.actionArg == 1 then
@@ -1610,6 +1620,8 @@ local function jb_set_action(m)
         e.canDash = true
         e.canBoost = true
     end
+
+    if isKirby then return end
 
     -- jump height
     if m.action == ACT_JUMP then
@@ -1987,3 +1999,33 @@ charSelect.hook_on_character_change(function()
     local e = gJerStates[m.playerIndex]
     e.shellHudTimer = shellHudTimerMax
 end)
+
+local function mod_compatibility()
+    -- Look for Better Coins
+    for _,mods in pairs(gActiveMods) do
+        if mods.name == "Better Coins" then
+            betterCoins = true
+        end
+    end
+
+    -- Add Kirby Copy
+    if kirbyDeluxe then
+        local KIRBY_COPY_JER = kirbyDeluxe.allocate_kirby_copy()
+
+        local function jb_kirby_update(m)
+            isKirby = true
+            jb_update(m)
+            isKirby = false
+        end
+
+        local function jb_kirby_set_action(m)
+            isKirby = true
+            jb_set_action(m)
+            isKirby = false
+        end
+
+        kirbyDeluxe.hook_kirby_copy(KIRBY_COPY_JER, HOOK_MARIO_UPDATE, jb_kirby_update)
+        kirbyDeluxe.hook_kirby_copy(KIRBY_COPY_JER, HOOK_ON_SET_MARIO_ACTION, jb_kirby_set_action)
+    end
+end
+hook_event(HOOK_ON_MODS_LOADED, mod_compatibility)
