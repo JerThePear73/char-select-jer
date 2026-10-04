@@ -1411,7 +1411,7 @@ local function jb_update(m)
         e.canBoost = true
         e.fuel = fuelMax*0.5
     end
-    if (actionChecks[m.action] ~= nil and actionChecks[m.action].boost) and e.canBoost and m.controller.buttonPressed & L_TRIG ~= 0 and e.fuel > 0 and capCheck then
+    if (actionChecks[m.action] ~= nil and actionChecks[m.action].boost) and e.canBoost and m.controller.buttonPressed & L_TRIG ~= 0 and e.fuel > 0 and capCheck and (not isKirby or m.action & ACT_FLAG_AIR ~= 0) then
         set_mario_action(m, ACT_BOOST, 0)
         m.marioObj.header.gfx.animInfo.animID = -1
         set_anim_to_frame(m, 0)
