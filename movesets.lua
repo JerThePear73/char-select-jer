@@ -2029,3 +2029,15 @@ local function mod_compatibility()
     end
 end
 hook_event(HOOK_ON_MODS_LOADED, mod_compatibility)
+
+charSelect.character_add_moveset_tutorial(CT_JB_JER, "Dash", "Dash by pressing A in the air", ACT_DASH)
+charSelect.character_add_moveset_tutorial(CT_JB_JER, "Trick", "Press B while airborne to perform a trick", ACT_TRICK)
+charSelect.character_add_moveset_tutorial(CT_JB_JER, "Fuel Building", "Perform tricks to fuel your Boost Meter\nComboing tricks gives you more fuel", function()
+    local e = gJerStates[0]
+    if e.fuel >= fuelMax then
+        return true
+    end
+end)
+charSelect.character_add_moveset_tutorial(CT_JB_JER, "Boost", "Boost by pressing L", ACT_BOOST)
+charSelect.character_add_moveset_tutorial(CT_JB_JER, "Slide Kick", "Press Z while running to Slide Kick", ACT_SLIDE_KICK)
+charSelect.character_add_moveset_tutorial(CT_JB_JER, "Breakdown", "Boost and Trick while performing a slide kick to break it down!", ACT_BREAK_DOWN)
